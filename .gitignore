@@ -40,3 +40,7 @@ code_review_report*.html
 # 重构过程临时产物（验证截图 / 一次性验证脚本，用完即弃）
 _refactor_preview*.png
 _verify_*.py
+
+# 个人/时效性业务文件不入库（2026-09-04 随恢复快照误入，移出跟踪）
+秦宝腾.xlsx
+每日财经要闻-*.html
