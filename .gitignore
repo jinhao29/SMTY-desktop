@@ -14,6 +14,8 @@ __pycache__/
 
 # 运行时元数据
 meta_index.db*
+# 桌面端自动备份产物（App 运行时实时生成，不入库）
+AutoBackups/
 # 文件锁伴生文件（file_lock 保留锁文件不删除，见 file_lock.py）
 *.lock
 
