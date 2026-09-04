@@ -98,12 +98,8 @@ def file_lock(file_path: str, mode: str = 'a+', timeout: float = 3.0,
             except Exception:
                 pass
         lock_file.close()
-        # 清理锁文件（失败不影响主流程）
-        try:
-            if os.path.exists(lock_path):
-                os.remove(lock_path)
-        except OSError:
-            pass
+        # 锁文件保留在磁盘上，不删除：删除会引入「删锁 vs 建锁」竞争，
+        # 使两个进程同时各持一个新锁文件，跨进程互斥失效。
 
 
 def atomic_save_workbook(wb, fpath: str) -> None:

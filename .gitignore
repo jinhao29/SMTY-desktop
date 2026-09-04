@@ -14,6 +14,8 @@ __pycache__/
 
 # 运行时元数据
 meta_index.db*
+# 文件锁伴生文件（file_lock 保留锁文件不删除，见 file_lock.py）
+*.lock
 
 # 签名密钥与凭据（严禁提交）
 SMTY
