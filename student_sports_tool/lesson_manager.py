@@ -201,7 +201,8 @@ def _rebuild_summary(wb, records):
 def get_summary(dir_path):
     """读取所有学员的课时汇总，返回列表。每条：{name,total,attended,remaining,last_date,note}。"""
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    with file_lock(fpath, mode='r'):
+        wb = load_workbook(fpath)
     records = _read_detail(wb)
     old_map = _read_summary_map(wb)
     all_names = set(old_map.keys()) | {rec['name'] for rec in records}
@@ -223,7 +224,8 @@ def get_summary(dir_path):
 def get_detail(dir_path, name=None):
     """读取课时明细记录。name 指定时只返回该学员的记录。"""
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    with file_lock(fpath, mode='r'):
+        wb = load_workbook(fpath)
     records = _read_detail(wb)
     if name:
         records = [r for r in records if r['name'] == name]
