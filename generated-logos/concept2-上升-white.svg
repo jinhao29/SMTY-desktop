@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 560">
+<path d="M205.0,320 L260.0,280 L315.0,320" fill="none" stroke="#fff" stroke-width="24"/>
+<path d="M195.0,256 L260.0,216 L325.0,256" fill="none" stroke="#fff" stroke-width="24"/>
+<path d="M185.0,192 L260.0,152 L335.0,192" fill="none" stroke="#fff" stroke-width="24"/>
+<g transform="translate(73.04000000000002,386) scale(0.82)">
+<path d="M0,0 L56,0 L56,10 L46,22 L0,22 Z" fill="#fff"/>
+<path d="M0,0 L22,0 L22,100 L0,100 Z" fill="#fff"/>
+<path d="M0,39 L48,39 L48,61 L0,61 Z" fill="#fff"/>
+<path d="M0,78 L46,78 L56,90 L56,100 L0,100 Z" fill="#fff"/>
+<path d="M70,0 L92,0 L102,60 L112,0 L134,0 L113,100 L91,100 Z" fill="#fff"/>
+<path d="M258,0 L280,0 L280,78 L296,78 L308,90 L308,100 L258,100 Z" fill="#fff"/>
+<path d="M322,0 L344,0 L354,60 L364,0 L386,0 L365,100 L343,100 Z" fill="#fff"/>
+<path d="M400,0 L456,0 L456,10 L446,22 L400,22 Z" fill="#fff"/>
+<path d="M400,0 L422,0 L422,100 L400,100 Z" fill="#fff"/>
+<path d="M400,39 L448,39 L448,61 L400,61 Z" fill="#fff"/>
+<path d="M400,78 L446,78 L456,90 L456,100 L400,100 Z" fill="#fff"/>
+<ellipse cx="196" cy="50" rx="21" ry="39" fill="none" stroke="#fff" stroke-width="22"/>
+</g>
+<text x="260.0" y="530.0" text-anchor="middle" fill="#fff" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-weight="700" font-size="40" letter-spacing="24">进化体育</text>
+</svg>

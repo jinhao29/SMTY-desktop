@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "glm-4-6v-flash": {
+      "command": "node",
+      "args": ["C:/Users/LeeNiuBi/Desktop/shangmentiyu/reasonix/skills/glm-chat/mcp-server.js", "${ZHIPU_API_KEY}"],
+      "env": {
+        "MODEL": "glm-4.6v-flash"
+      }
+    },
+    "code-fix": {
+      "command": "node",
+      "args": ["C:/Users/LeeNiuBi/Desktop/shangmentiyu/reasonix/skills/code-fix/mcp-server.js", "${ZHIPU_API_KEY}"],
+      "env": {
+        "MODEL": "glm-4.6v-flash"
+      }
+    },
+    "test-gen": {
+      "command": "node",
+      "args": ["C:/Users/LeeNiuBi/Desktop/shangmentiyu/reasonix/skills/test-gen/mcp-server.js", "${ZHIPU_API_KEY}"],
+      "env": {
+        "MODEL": "glm-4.6v-flash"
+      }
+    }
+  }
+}

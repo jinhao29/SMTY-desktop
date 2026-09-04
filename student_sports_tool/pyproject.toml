@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shangmentiyu-sports-tool"
+version = "1.0.0"
+description = "上门体育教学管理工具 · Python 桌面端（学员档案 / 体测 / 课时 / 训练 / 数据中心）"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "ShangMenTiYu" },
+]
+# 运行时依赖（版本范围；精确锁定见 requirements.txt）
+dependencies = [
+    "PySide6>=6.5.0",
+    "openpyxl>=3.1.0",
+    "python-docx>=1.0.0",
+    "Pillow>=10.0.0",
+    "portalocker>=2.7.0",
+    "requests>=2.28.0",
+]
+
+[project.scripts]
+shangmentiyu = "main:main"
+
+[tool.setuptools]
+# 桌面端为扁平包结构（非 src 布局），无需额外配置
+packages = []

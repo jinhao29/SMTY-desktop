@@ -1,0 +1,38 @@
+node_modules/
+android_app/
+dist/
+build/
+__pycache__/
+*.pyc
+.uploads/
+.reasonix/
+.codegraph/
+*.log
+# 备份文件（.bak / .orig 等）不入库，避免仓库冗余
+*.bak
+*.orig
+
+# 运行时元数据
+meta_index.db*
+
+# 签名密钥与凭据（严禁提交）
+SMTY
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.smty_backup
+keystore.properties
+
+# Android UI Automator 调试转储（ui*.xml）
+ui*.xml
+
+# 工具与临时资料（不入库）
+.workbuddy/
+# 代码审查报告为本地生成的时效性产物，全版本一并忽略（v1/v2/v3 规则统一）
+code_review_report*.html
+深圳体育中考.pdf
+
+# 重构过程临时产物（验证截图 / 一次性验证脚本，用完即弃）
+_refactor_preview*.png
+_verify_*.py

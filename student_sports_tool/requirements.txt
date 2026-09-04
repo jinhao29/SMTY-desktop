@@ -1,0 +1,26 @@
+# 上门体育教学管理工具 · 桌面端 Python 依赖清单（锁定版本）
+# Python 3.10+
+# 用途：环境复现、CI 构建、PyInstaller 隐式依赖推断
+# 说明：pose_recognition 实验模块已裁剪，不再依赖 opencv-python / mediapipe / numpy
+
+# ===== 核心运行时（== 锁定，保证可复现）=====
+PySide6==6.11.1
+# Qt6 for Python：QtWidgets / QtGui / QtCore / QtCharts
+
+openpyxl==3.1.5
+# Excel .xlsx 读写：学员档案 / 课时记录 / 汇总表 / 模板导入导出
+
+python-docx==1.2.0
+# Word 文档导出：仅 training_tool/exporter.py 训练计划导出
+
+Pillow==12.3.0
+# 图像处理：PDF 报告图表位图处理、备份照片元信息读取
+
+requests==2.33.1
+# HTTP 客户端：GitHub 自动更新检查 + 下载新版本包
+
+portalocker>=2.7.0
+# 跨进程文件互斥锁（file_lock.py）
+
+# ===== 标准库（无需 pip 安装）=====
+# os / sys / json / zipfile / shutil / datetime / importlib / tempfile / math / sqlite3 / threading

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>上门体育 · 双端技术审查报告 2026-09</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#fafafa; --panel2:#f4f4f2;
+    --ink:#111111; --ink2:#333333; --muted:#6b6b6b; --faint:#9b9b9b;
+    --line:#e2e2df; --line2:#c9c9c4;
+    --p0:#b3272d; --p1:#8a5a1f; --p2:#3d3d3d; --p3:#8c8c8c; --ok:#2d6a3f;
+    --serif:"Songti SC","SimSun","Noto Serif CJK SC",Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,sans-serif;
+    --mono:"SF Mono",Consolas,"Cascadia Mono","Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.75;font-size:15px}
+  .wrap{max-width:1140px;margin:0 auto;padding:56px 32px 100px}
+
+  /* ---------- masthead ---------- */
+  .masthead{border-bottom:3px double var(--ink);padding-bottom:20px;margin-bottom:8px}
+  .kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{font-family:var(--serif);font-size:38px;line-height:1.18;margin:10px 0 8px;font-weight:700;letter-spacing:-.01em}
+  .deck{font-family:var(--serif);font-size:17px;color:var(--ink2);line-height:1.6;max-width:780px}
+  .byline{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;color:var(--muted);padding:10px 0 0;font-variant-numeric:tabular-nums}
+  .byline b{color:var(--ink2);font-weight:600}
+
+  /* ---------- scoreboard ---------- */
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border:1px solid var(--line);border-radius:3px;margin:32px 0 28px;overflow:hidden}
+  .board .cell{padding:16px 14px;border-right:1px solid var(--line);background:var(--panel)}
+  .board .cell:last-child{border-right:none}
+  .board .n{font-family:var(--serif);font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  .board .l{font-size:11px;color:var(--muted);margin-top:7px;letter-spacing:.04em}
+  .c-p0{color:var(--p0)} .c-p1{color:var(--p1)} .c-p2{color:var(--p2)} .c-p3{color:var(--p3)} .c-ok{color:var(--ok)}
+
+  /* ---------- verdict ---------- */
+  .verdict{border-left:3px solid var(--p0);background:var(--panel);padding:18px 22px;margin:0 0 12px}
+  .verdict h4{margin:0 0 8px;font-family:var(--serif);font-size:16px}
+  .verdict p{margin:6px 0;font-size:14px;color:var(--ink2)}
+
+  /* ---------- headings ---------- */
+  h2{font-family:var(--serif);font-size:24px;margin:56px 0 4px;padding-top:22px;border-top:1px solid var(--line2);letter-spacing:-.005em}
+  h2 .num{color:var(--faint);font-size:15px;margin-right:10px;font-variant-numeric:tabular-nums}
+  .h2sub{color:var(--muted);font-size:12.5px;margin:0 0 20px;letter-spacing:.02em}
+  h3{font-family:var(--serif);font-size:17px;margin:32px 0 10px;color:var(--ink)}
+  h3 .cn{color:var(--faint);font-size:12px;font-family:var(--sans);margin-left:8px;letter-spacing:.05em}
+
+  /* ---------- table ---------- */
+  table{width:100%;border-collapse:collapse;margin:14px 0 26px;font-size:13.5px}
+  thead th{
+    text-align:left;padding:9px 11px;border-top:1.5px solid var(--ink);border-bottom:1px solid var(--line2);
+    font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700;background:#fff;
+  }
+  tbody td{padding:13px 11px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.65}
+  tbody tr:hover{background:var(--panel)}
+  td.id{font-family:var(--mono);font-size:11.5px;color:var(--faint);white-space:nowrap;padding-top:15px}
+  td.loc{font-family:var(--mono);font-size:11.5px;color:#2f5d7c;line-height:1.75;max-width:250px;word-break:break-all}
+  td.issue{min-width:250px}
+  td.act{font-size:13px;color:var(--ink2)}
+  .sev{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.06em;white-space:nowrap}
+  .s-p0{background:var(--p0);color:#fff}
+  .s-p1{background:var(--p1);color:#fff}
+  .s-p2{background:var(--p2);color:#fff}
+  .s-p3{background:var(--p3);color:#fff}
+  .it{font-weight:600;display:block;margin-bottom:4px}
+
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:1px 5px;font-family:var(--mono);font-size:11.5px;color:#7a3b1f;word-break:break-all}
+  pre{background:var(--panel2);border:1px solid var(--line);border-left:2px solid var(--line2);border-radius:2px;padding:10px 13px;margin:8px 0;font-family:var(--mono);font-size:11.5px;line-height:1.65;overflow-x:auto;color:#333}
+  .ev{font-family:var(--mono);font-size:11px;color:var(--faint);display:block;margin-top:5px}
+
+  /* ---------- misc ---------- */
+  ul{margin:8px 0;padding-left:19px}
+  li{margin:5px 0}
+  .note{background:var(--panel);border:1px solid var(--line);padding:14px 18px;margin:16px 0;font-size:13.5px}
+  .note.strong{border-left:3px solid var(--p0)}
+  .note.good{border-left:3px solid var(--ok)}
+  .note h4{margin:0 0 7px;font-size:14px;font-family:var(--serif)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 34px}
+  .kv{display:flex;justify-content:space-between;border-bottom:1px dotted var(--line2);padding:6px 0;font-size:13px}
+  .kv span:last-child{font-family:var(--mono);font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+  .phase{border:1px solid var(--line);border-radius:3px;margin:18px 0;overflow:hidden}
+  .phase .hd{background:var(--panel2);padding:11px 16px;font-family:var(--serif);font-size:15px;font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline}
+  .phase .hd small{font-family:var(--sans);font-size:11.5px;color:var(--muted);font-weight:400}
+  .phase table{margin:0}
+  .phase tbody td:first-child{width:38%}
+  .foot{margin-top:60px;padding-top:16px;border-top:3px double var(--ink);color:var(--muted);font-size:12px}
+  @media(max-width:820px){
+    .wrap{padding:32px 18px 60px}
+    h1{font-size:27px}
+    .board{grid-template-columns:repeat(2,1fr)}
+    .board .cell{border-bottom:1px solid var(--line)}
+    .grid2{grid-template-columns:1fr}
+    table{font-size:12.5px}
+    td.loc{max-width:130px}
+  }
+  @media print{body{font-size:11pt}.wrap{padding:0}h2{page-break-after:avoid}tr{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ==================== MASTHEAD ==================== -->
+<div class="masthead">
+  <div class="kicker">Technical Audit · 全栈深度审查</div>
+  <h1>上门体育 · 双端技术审查报告</h1>
+  <div class="deck">对 Android 教练端（SportsCoach）与 Python 桌面端（上门体育教学管理工具）的架构、性能、安全、依赖、错误处理与测试覆盖率做一次系统性体检。审查基于源码实证，每条结论均附文件路径与行号。</div>
+  <div class="byline">
+    <span>审查日期 <b>2026-09-04</b></span>
+    <span>Android <b>271 Kotlin 文件</b></span>
+    <span>桌面端 <b>129 Python 文件</b></span>
+    <span>总计 <b>38 项发现</b></span>
+    <span>方法 <b>四路并行静态审查 + 关键项独立复核</b></span>
+  </div>
+</div>
+
+<div class="board">
+  <div class="cell"><div class="n c-p0">3</div><div class="l">P0　严重 / 数据丢失</div></div>
+  <div class="cell"><div class="n c-p1">9</div><div class="l">P1　高风险 / 架构缺陷</div></div>
+  <div class="cell"><div class="n c-p2">17</div><div class="l">P2　质量 / 卫生</div></div>
+  <div class="cell"><div class="n c-p3">9</div><div class="l">P3　优化 / 建议</div></div>
+  <div class="cell"><div class="n c-ok">20</div><div class="l">正面实践（已确认）</div></div>
+</div>
+
+<div class="verdict">
+  <h4>总体结论</h4>
+  <p>两端工程质量在同类个人/小团队项目中属<b>中上水平</b>：模块边界在构建层干净、无危险反序列化、无 SQL 注入、Zip 穿越防护到位、更新链 sha256 fail-closed、跨线程 UI 操作全部合规。这些是很多项目做不到的。</p>
+  <p>但存在 <b class="c-p0">3 个 P0</b>，且高度集中在一个主题上——<b>未成年人敏感个人信息的明文落地</b>。Room 数据库未加密（20 张实体表含姓名/电话/身高体重）、备份 ZIP 未加密、桌面端主数据 .xlsx 非原子写。前两项是合规与泄露风险，第三项是实打实的数据丢失风险：一个 <code>wb.save()</code> 中途断电，整个学员档案就废了。</p>
+  <p>架构上真正的债不在"分层不清"，而在 <b class="c-p1">God 类</b>：Android 端 31 个超 500 行文件（最大 <code>PreClassTab.kt</code> 1485 行），桌面端 <code>ui_template_screen.py</code> 里 <code>SingleTab</code> 一个类扛 500 行。测试则是两端共同短板——核心数据层与加解密模块零覆盖。</p>
+</div>
+
+<div class="note">
+  <h4>与上一版（v3 / 2026-08-28）的进展对照</h4>
+  <ul style="margin-bottom:0">
+    <li>✅ <b>已闭环</b>：签名密钥明文 <code>.keystore_pass.txt</code> 已删除，密钥经环境变量注入。</li>
+    <li>✅ <b>已闭环</b>：Android 更新器已补 APK 完整性校验（<code>UpdateIntegrity.kt</code>）。</li>
+    <li>✅ <b>已闭环</b>：Zip 路径穿越四处全部修复，<code>verify_zip_sha256</code> 改 fail-closed。</li>
+    <li>✅ <b>已改善</b>：<code>OperationRepository</code> 已从 1498 行重构至 <b>638 行</b>（注：历史报告中"1498 行"的记录已过时，本次实测为 638 行）。</li>
+    <li>⚠️ <b>新增发现</b>：Room 明文存储、备份 ZIP 未加密、xlsx 非原子写 —— 这三项在 v3 中未被识别，是本轮的主要增量。</li>
+  </ul>
+</div>
+
+<!-- ==================== ANDROID ==================== -->
+<h2><span class="num">01</span>Android 教练端</h2>
+<div class="h2sub">android_app/ · Kotlin 2.2.10 + Compose + Room 2.7.1 + Koin 4.0 · 模块 :core / :data / :app · compileSdk 35 / minSdk 26</div>
+
+<h3>1.1 安全<span class="cn">SECURITY</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>风险与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p0">P0</span><br>AND-01</td>
+  <td class="loc">data/.../db/AppDatabase.kt:31-37</td>
+  <td class="issue"><span class="it">Room 数据库完全未加密，明文存储未成年人 PII</span>
+  20 个实体直接 <code>Room.databaseBuilder</code> 构建，无任何加密层；<code>gradle/libs.versions.toml</code> 中<b>无 sqlcipher 依赖</b>。<code>Student</code> 表含 name / phone / school / heightCm / weightKg。</td>
+  <td class="act"><b>风险：</b>root 设备、<code>adb backup</code>、物理接触均可直接导出全部学员姓名、家长电话、体质数据。违反《个人信息保护法》对敏感个人信息的加密存储要求。<br>
+  <b>建议：</b>① 引入 <code>sqlcipher-android</code> + <code>room-sqlcipher</code>，密钥由 Android Keystore 托管；② 或退一步：仅对 <code>phone</code>/<code>name</code> 字段做应用层加密（改造量小，可作为过渡方案）。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p0">P0</span><br>AND-02</td>
+  <td class="loc">data/.../internal/BackupManager.kt:189<br>:212, :304-318, :949</td>
+  <td class="issue"><span class="it">备份 ZIP 未加密，导出的是明文 PII 包</span>
+  <code>ZipOutputStream</code> 直接打包，<code>export_meta.json</code> 明文写入 name/phone/heightCm/weightKg。文件经 SAF 导出到用户自选位置。
+  <pre>ZipOutputStream(outputStream)  // :189
+json.put("name", s.name)
+json.put("phone", s.phone)      // :304-318</pre></td>
+  <td class="act"><b>风险：</b>用户把 <code>.smty_backup</code> 发微信、传云盘、拷 U 盘，等于把全量未成年人信息明文外发，且无法密码保护。这是最现实的一条泄露路径。<br>
+  <b>建议：</b>备份时强制要求用户设置口令，用 PBKDF2 派生密钥做 AES-GCM 加密（<code>PhotoCrypto</code> 已有现成实现可复用）；恢复端做口令校验与版本兼容。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>AND-03</td>
+  <td class="loc">app/src/main/AndroidManifest.xml:33<br>:39</td>
+  <td class="issue"><span class="it"><code>allowBackup="true"</code> + <code>requestLegacyExternalStorage="true"</code></span>
+  允许 <code>adb backup</code> 提取整个应用沙箱，与 AND-01/AND-04 叠加后危害放大。</td>
+  <td class="act"><b>风险：</b>一根数据线即可拖走明文 DB + 密钥种子 + 崩溃日志。<br>
+  <b>建议：</b>改为 <code>allowBackup="false"</code>；若确需备份，用 <code>dataExtractionRules</code> 显式排除 databases / DataStore / crash_logs。<code>requestLegacyExternalStorage</code> 在 targetSdk 35 上已失效，建议移除。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>AND-04</td>
+  <td class="loc">data/.../repo/SettingsRepository.kt:43<br>app/.../framework/PhotoCrypto.kt:126-130</td>
+  <td class="issue"><span class="it">照片加密密钥种子明文落 DataStore</span>
+  <code>KEY_USER_PRIVATE_KEY = "user_private_key"</code> 明文存 DataStore（protobuf 落盘），PBKDF2 由此种子派生 AES 密钥。叠加 allowBackup 可直接提取。</td>
+  <td class="act"><b>风险：</b>攻击者拿到种子即可派生密钥，解密全部签到人脸照片（属生物特征信息，合规敏感度最高的一档）。<br>
+  <b>建议：</b>统一走 Android Keystore（<code>MasterKey</code> AES256_GCM）。<b>注意：旧方案 <code>PhotoCrypto.kt:196-206</code> 的 <code>EncryptedFile</code> 实现是正确的</b>，新方案反而退化了，建议回退到 Keystore 路线。<br><span class="ev">正面：算法本身强 —— AES-GCM + PBKDF2 60000 迭代 + SecureRandom IV，符合 OWASP 2023。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>AND-05</td>
+  <td class="loc">app/proguard-rules.pro（无相关规则）<br>MomentUploader.kt:208<br>LessonConsumptionRepository.kt:163,243<br>AutoScheduleCoordinator.kt:213,216<br>OperationViewModel.kt:509,515</td>
+  <td class="issue"><span class="it">Release 未剥离日志，且日志含学员姓名</span>
+  <code>proguard-rules.pro</code> 全文<b>无</b> <code>assumenosideeffects</code> for <code>android.util.Log</code>；<code>isMinifyEnabled=true</code> 也不剥离日志。多处 <code>Log.i(TAG, "...：$safeName ...")</code> 直接打印学员姓名。</td>
+  <td class="act"><b>风险：</b>任何人手机装个 logcat 阅读器，无需 root 就能看到学员姓名流水。<br>
+  <b>建议：</b>① proguard 加 <code>-assumenosideeffects class android.util.Log { *; }</code>（仅 release）；② 或引入 Timber，release 种空 Tree；③ 业务日志统一脱敏，只打匿名 ID。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>AND-06</td>
+  <td class="loc">app/.../framework/UdpDesktopDiscoveryService.kt:144<br>:180-202, :191-196<br>MomentUploader.kt:170, :271</td>
+  <td class="issue"><span class="it">UDP 局域网发现无认证，可伪造心跳劫持上传目标</span>
+  <code>DatagramSocket(9112)</code> 监听广播，<code>handleBroadcast</code> <b>仅校验</b> <code>type=="desktop_online"</code> 就把 <code>host:port</code> 写入 SharedPreferences，无 HMAC / 共享密钥。</td>
+  <td class="act"><b>风险：</b>同网段（含公共 WiFi、培训机构共享网络）攻击者发一个伪造 UDP 包，即可把学员照片上传目标指向自己主机。<br>
+  <b>建议：</b>① 心跳报文加 HMAC-SHA256 签名（两端预共享密钥）；② 首次配对走二维码/手动确认，之后白名单化；③ 上传前对主机做一次 TLS 证书校验。<br>
+  <span class="ev">正面：<code>MomentUploader.kt:72-95</code> 的 <code>isLocalNetworkHost()</code> 严格限定内网才允许明文 HTTP，有效防止误发公网；已支持 <code>X-Sync-Token</code> 鉴权。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-07</td>
+  <td class="loc">app/src/main/res/xml/network_security_config.xml:16</td>
+  <td class="issue"><span class="it">全局允许明文流量</span>
+  <code>&lt;base-config cleartextTrafficPermitted="true"/&gt;</code> 作用于全局而非仅 LAN 域名。</td>
+  <td class="act"><b>风险：</b>配置面过宽。目前靠代码层 <code>isLocalNetworkHost</code> 守卫，一旦该守卫出现回归，任意明文 HTTP 都会被放行。<br>
+  <b>建议：</b>改用 <code>&lt;domain-config&gt;</code> 限定到具体 LAN 段，或 base-config 设为 false。纵深防御，别把鸡蛋放一个篮子。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>AND-08</td>
+  <td class="loc">app/src/main/res/xml/provider_paths.xml:3-8</td>
+  <td class="issue"><span class="it">FileProvider 暴露整块外部存储根</span>
+  所有路径均配置为 <code>path="."</code>。</td>
+  <td class="act"><b>风险：</b>违反最小暴露原则，但实际风险有限 —— <code>AndroidManifest.xml:63</code> 已设 <code>exported="false"</code>，仅本应用可生成 URI。<br><b>建议：</b>按需收窄到具体子目录。</td>
+</tr>
+</tbody>
+</table>
+
+<h3>1.2 架构设计<span class="cn">ARCHITECTURE</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>影响与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>AND-09</td>
+  <td class="loc">ui/home/PreClassScheduleCard.kt:121<br>ui/settings/SettingsViewModel.kt:954,1053<br>app/framework/ScheduleReminderWorker.kt:98</td>
+  <td class="issue"><span class="it">UI / ViewModel / Worker 直连 AppDatabase，绕过 Repository</span>
+  <pre>val dao = AppDatabase.getDatabase(
+    context.applicationContext as Application
+).planImageDao()
+dao.getByStudentDual(...).collect { value = it }</pre></td>
+  <td class="act"><b>影响：</b>破坏数据层封装，DAO 查询脱离 Repository 的事务与缓存策略，且无法被统一 mock —— 这正是 AND-14 测试缺失的根因之一。<br>
+  <b>建议：</b>抽 <code>PlanImageRepository</code> / <code>PhotoOrphanRepository</code>，三处调用改走 Repository 并注入 Koin。<br>
+  <span class="ev">正面：模块边界在<b>构建层</b>是干净的（:core 零依赖、:data→:core、:app→:core+:data），无反向依赖；DI 全量 Koin，无手工 new Repository。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>AND-10</td>
+  <td class="loc">31 个 &gt;500 行文件<br>PreClassTab.kt:1485<br>SettingsViewModel.kt:1244<br>HomeViewModel.kt:1183<br>GrowthScreen.kt:1161<br>LessonCheckInScreen.kt:1114<br>DietManageScreen.kt:1107<br>BackupManager.kt:963<br>AppDatabaseMigrations.kt:979</td>
+  <td class="issue"><span class="it">God 类严重超标</span>
+  UI 层 7 个超 800 行 Screen，ViewModel 3 个超 900 行，数据层 <code>BackupManager</code>(963) / <code>StudentRepository</code>(802) / <code>ScheduleQueryRepository</code>(710)。
+  <div class="grid2" style="margin-top:6px">
+    <div><div class="kv"><span>SettingsViewModel</span><span>1244</span></div><div class="kv"><span>HomeViewModel</span><span>1183</span></div><div class="kv"><span>PreClassTab</span><span>1485</span></div></div>
+    <div><div class="kv"><span>AppDatabaseMigrations</span><span>979</span></div><div class="kv"><span>BackupManager</span><span>963</span></div><div class="kv"><span>&gt;500 行文件总数</span><span>31</span></div></div>
+  </div></td>
+  <td class="act"><b>影响：</b>单文件认知负荷极高，合并冲突概率与回归风险上升，无法单元测试。<br>
+  <b>建议：</b>① <code>BackupManager</code> 按 Zip 写/读/完整性校验拆三个类（参考桌面端 <code>data_center/backup/</code> 的拆法，直接照搬思路）；② <code>SettingsViewModel</code> 按设置分组拆多个 VM；③ <code>PreClassTab</code> 抽出卡片组件与状态 Holder。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>AND-11</td>
+  <td class="loc">ui/operation/AutoScheduleCoordinator.kt:17-22, :54</td>
+  <td class="issue"><span class="it">Coordinator 持有 UI 回调，边界仍模糊</span>
+  注释自述"逻辑逐字搬迁自 OperationViewModel"，构造函数持有 <code>onToast: (String)-&gt;Unit</code>。</td>
+  <td class="act"><b>影响：</b>拆分方向正确（减轻 VM），但 <code>onToast</code> 把 UI 关注点泄漏进协调层。<br><b>建议：</b>改为返回 Result，由 VM 决定如何提示。</td>
+</tr>
+</tbody>
+</table>
+
+<h3>1.3 性能表现<span class="cn">PERFORMANCE</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>影响与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-12</td>
+  <td class="loc">ui/home/PreClassScheduleCard.kt:117-125<br>ui/home/PreClassTab.kt:191</td>
+  <td class="issue"><span class="it">LazyColumn 每个卡片独立订阅 DB 流，形成 N+1 查询</span>
+  在 <code>produceState</code> 内按 <code>schedule.studentName</code> 逐条订阅 <code>planImageDao</code>，该卡片位于 LazyColumn 中按学员数重复组合。</td>
+  <td class="act"><b>影响：</b>可见 N 个学员 = N 条独立 DB 订阅，列表滚动时订阅反复建立/销毁，数据库压力与重组放大。与 AND-09 是同一个根因。<br>
+  <b>建议：</b>在 ViewModel 层一次性批量查询（<code>WHERE studentId IN (:ids)</code>），以 Map 形式下发；或至少把订阅提到列表外层。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-13</td>
+  <td class="loc">全项目（grep contentType 零命中）<br>ui/coach/CoachManageScreen.kt:217<br>ui/lessoncheckin/LessonCheckInScreen.kt:374,398,437</td>
+  <td class="issue"><span class="it">所有 LazyColumn 均未声明 contentType</span></td>
+  <td class="act"><b>影响：</b>含多种卡片类型的长列表滚动时无法按类型复用 composition，触发更激进的重组。<br><b>建议：</b>为混合类型列表补 <code>contentType = { it::class }</code>，改动量小收益明确。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-14</td>
+  <td class="loc">ui/home/PreClassTab.kt:973, :980</td>
+  <td class="issue"><span class="it">大列表用手工截取 500 条，未复用已有 Paging 能力</span>
+  <code>val displayCap = 500</code>，UI 提示"前 500 条"。而 <code>LessonRepository.kt:64,82,93</code> 已正确接入 Pager。</td>
+  <td class="act"><b>影响：</b>历史类数据超 500 条后直接不可见，且手工截断不能解决滚动性能。<br><b>建议：</b>把 Schedule / ArchivedLesson 也迁到 Paging 3，与 Lesson 保持一致。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-15</td>
+  <td class="loc">app/framework/PhotoCrypto.kt:115<br>data/.../repo/SettingsRepository.kt:94</td>
+  <td class="issue"><span class="it">runBlocking 同步读密钥，可能阻塞主线程</span>
+  <code>fun getUserPrivateKeyBlocking(): String = runBlocking { ... }</code>，在"非协程上下文"被调用。</td>
+  <td class="act"><b>影响：</b>若该路径在签到存图时于主线程触发，会直接在 UI 线程做 DB 读取，造成掉帧甚至 ANR。<br><b>建议：</b>PhotoCrypto 的调用点改为 suspend，或把密钥在应用启动时预加载进内存缓存。<br>
+  <span class="ev">正面：Room 索引整体到位（8 个实体已声明 indices），未发现缺索引的 WHERE 热点；Coil 加载图片有内存缓存与容错兜底，无全尺寸 Bitmap 直解 OOM 风险。</span></td>
+</tr>
+</tbody>
+</table>
+
+<h3>1.4 代码质量与测试<span class="cn">QUALITY &amp; TESTING</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>影响与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-16</td>
+  <td class="loc">data/.../excel/ExcelSync.kt:175-176<br>data/.../excel/ExcelSync.kt:314-315</td>
+  <td class="issue"><span class="it">核心 Excel 模块异常静默吞没</span>
+  <code>catch (e: Exception) { e.printStackTrace(); return false }</code>，无日志上报、无用户提示、无错误码。位于 694 行的核心导出模块。</td>
+  <td class="act"><b>影响：</b>导出失败用户只看到"没反应"，问题无法定位。<br><b>建议：</b>抛 Result 或 sealed class，UI 层显式提示失败原因。<br>
+  <span class="ev">正面：全仓仅此 2 处 printStackTrace；空 catch 仅 3 处（StageSummaryRepository.kt:100、CoachDailyReportViewModel.kt:122、SettingsViewModel.kt:1081）；UpdateManager 等 17 处 catch 均为 <code>Log.e(TAG, msg, e)</code> 带栈，属可接受。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>AND-17</td>
+  <td class="loc">app/src/test（无 PhotoCrypto 用例）<br>:core/src/test</td>
+  <td class="issue"><span class="it">安全关键模块与核心算法零测试</span>
+  <b>无任何用例</b>覆盖 <code>PhotoCrypto</code> 的 AES-GCM/PBKDF2 加解密、跨方案回退。<code>:core</code> 中 <code>BmiProcessor</code> / <code>TdeeProcessor</code> / <code>GrowthStandard</code> / <code>HeightRatingProcessor</code> / <code>AutoScheduleCalculator</code> / <code>Standards</code> 均无测试。</td>
+  <td class="act"><b>影响：</b>加解密逻辑一旦回归（IV 复用、盐值变更）将无声破坏历史照片解密，且无测试拦截。算法类处理的是未成年人身高体重评级，算错了不会崩，只会悄悄给出错误结论。<br>
+  <b>建议：</b>优先补 PhotoCrypto 往返加解密测试 + 旧格式兼容测试；算法类补黄金样本测试（golden test）。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>AND-18</td>
+  <td class="loc">service/FloatingWindowService.kt:70-74<br>ui/home/PreClassScheduleCard.kt:159</td>
+  <td class="issue"><span class="it">话术与 UI 文案硬编码</span>
+  三句话术直接 <code>listOf("今天表现很棒…","注意动作标准…","休息30秒…")</code>；中文文案未入 string resources。</td>
+  <td class="act"><b>建议：</b>话术抽到 resources 或数据库配置（教练可能想改）；UI 文案统一走 <code>stringResource</code>。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>AND-19</td>
+  <td class="loc">ui/schedule/（6 个 Dialog 文件）<br>DeleteScheduleConfirmDialog.kt:27-41 等</td>
+  <td class="issue"><span class="it">AlertDialog 样板重复</span>
+  6 个确认类 Dialog 重复 <code>AlertDialog(onDismissRequest/title/text/confirmButton)</code> 结构。</td>
+  <td class="act"><b>建议：</b>提取通用 <code>ConfirmDialog(message, onConfirm)</code>，可削减约 200 行。</td>
+</tr>
+</tbody>
+</table>
+
+<div class="note good">
+  <h4>Android 端测试现状</h4>
+  <p style="margin:0">18 个测试文件 / <b>166 个 @Test</b>（:app 12、:core 50、:data 104）。CI <code>.github/workflows/build-apk.yml:103</code> 已执行 <code>./gradlew testDebugUnitTest</code> —— <b>有跑测试，这是好的</b>。但<b>无 androidTest 目录、无 jacoco 覆盖率门禁</b>，意味着覆盖率是"黑盒"，没人知道实际覆盖了多少，也没有阈值卡住劣化。</p>
+</div>
+
+<!-- ==================== DESKTOP ==================== -->
+<h2><span class="num">02</span>桌面端 · 后端与数据层</h2>
+<div class="h2sub">student_sports_tool/ · Python + PySide6 6.11.1 + openpyxl + SQLite 索引库 · 分层 UI → 协调层 → 管理层 → 数据层</div>
+
+<h3>2.1 数据持久化<span class="cn">PERSISTENCE</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>风险与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p0">P0</span><br>DES-01</td>
+  <td class="loc">student_profile/profile_storage.py:107,269,346,383,438,505<br>lesson_manager.py:26<br>excel_builder.py:424</td>
+  <td class="issue"><span class="it">主数据 .xlsx 写入非原子，崩溃即损坏整个档案</span>
+  <b>8 处</b> <code>wb.save(fpath)</code> 直接覆盖目标路径，无临时文件 + <code>os.replace</code>。全仓<b>仅</b> <code>data_center/config_manager.py:72-76</code> 对配置文件做了原子写，所有 xlsx 写路径均未采用。
+  <pre># config_manager.py:72-76 —— 正确的写法已有，只是没推广
+fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix='.tmp')
+...
+os.replace(tmp_path, fpath)
+
+# profile_storage.py:346 —— 实际写法
+wb.save(fpath)   # 直接覆盖，中断即截断</pre></td>
+  <td class="act"><b>风险：</b>.xlsx 本质是 zip。写入过程中断电 / 崩溃 / 被杀，文件被截断即整体损坏，且无可回滚副本 —— 学员档案与课时记录是<b>这个工具的全部家当</b>。<br>
+  <b>建议：</b>封装统一 <code>atomic_save_workbook(wb, fpath)</code>：<code>mkstemp</code> 同目录 → <code>wb.save(tmp)</code> → <code>os.replace(tmp, fpath)</code> → 失败清理 tmp。8 处调用点全部替换，约 30 行改动，是本次审查<b>性价比最高</b>的一处修复。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-02</td>
+  <td class="loc">file_lock.py:97-101</td>
+  <td class="issue"><span class="it">文件锁释放时删除 .lock 伴生文件（经典反模式）</span>
+  <code>finally</code> 中 <code>os.remove(lock_path)</code>。锁加在 <code>&lt;path&gt;.lock</code> 句柄上，数据文件本身未被 OS 锁定；释放即删锁文件。</td>
+  <td class="act"><b>风险：</b>多进程竞争窗口下，删除后新进程可对同名新 inode 加锁，跨进程互斥失效。手机端备份与桌面端并发写同一档案时尤其危险，叠加 DES-01 会放大损坏概率。<br>
+  <b>建议：</b>保留 <code>.lock</code> 文件（只 unlock 不 delete），或改用对数据文件本身的 advisory lock。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-03</td>
+  <td class="loc">lesson_manager.py:203, :225（读）<br>lesson_manager.py:25-26（写）</td>
+  <td class="issue"><span class="it">课时读取未加锁，与写锁不对称</span>
+  <code>get_summary</code> / <code>get_detail</code> 中 <code>load_workbook(fpath)</code> 全程无锁，而写路径 <code>_save_wb</code> 有锁。</td>
+  <td class="act"><b>风险：</b>写进行中并发读可能读到半写文件，openpyxl 抛异常被上层吞掉返回空 —— 表现为偶发"数据消失"，最难排查的那类 bug。<br>
+  <b>建议：</b>读也加 <code>file_lock(..., mode='r')</code>，<code>profile_storage.py:187</code> 已经这么做了，照抄即可。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-04</td>
+  <td class="loc">data_center/meta_index_store.py:201,215,305,321,335<br>:53（_connect 开 WAL）</td>
+  <td class="issue"><span class="it">SQLite 连接未可靠关闭，且 WAL 模式不一致</span>
+  多处 <code>with sqlite3.connect(db_path) as conn:</code> —— Python &lt;3.13 中 <code>Connection.__exit__</code> <b>只 commit/rollback，不关闭连接</b>，句柄直到 GC 才释放。<code>is_index_available</code> 等用裸 connect 且未开 WAL，与 <code>_connect</code> 不一致。</td>
+  <td class="act"><b>风险：</b>重建索引（每次全目录扫描）频繁调用会累积未关连接；WAL 只在部分路径生效，并发读写保护不完整。<br>
+  <b>建议：</b>统一经 <code>_connect</code> 获取连接 + <code>finally: conn.close()</code>；或直接用 <code>contextlib.closing(sqlite3.connect(...))</code> 一行解决。</td>
+</tr>
+</tbody>
+</table>
+
+<h3>2.2 安全<span class="cn">SECURITY</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>风险与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-05</td>
+  <td class="loc">data_center/archive_manager.py:124-140<br>data_center/backup/backup_restorer.py:68<br>auto_sync.py:35-38, :99</td>
+  <td class="issue"><span class="it">手动恢复路径未过滤可执行扩展名</span>
+  <code>restore_from_zip</code> 只拒绝越界路径与 <code>~$</code>，<b>不排除 .exe/.py</b>。可执行扩展名拦截 <code>validate_backup_zip</code>（含 .exe/.py/.ps1）仅在 auto_sync 自动同步时调用，手动"数据中心→恢复"<b>不触发</b>。</td>
+  <td class="act"><b>风险：</b>用户手动导入攻击者构造的 zip，可把 <code>evil.exe</code> 释放到档案目录。虽不自动执行，仍属非预期写入。<br>
+  <b>建议：</b><code>do_restore</code> 入口统一调用 <code>validate_backup_zip</code>，让两条路径走同一套校验。<br>
+  <span class="ev">正面：zip-slip 在三处均已防护（updater._safe_extract_zip / archive_manager.restore_from_zip / extract_android_assets），无遗漏。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-06</td>
+  <td class="loc">updater.py:389-405（verify_zip_sha256）<br>updater.py:348-361（find_expected_sha256）</td>
+  <td class="issue"><span class="it">更新完整性校验是"同信道哈希"，防不住控制 Release 的攻击者</span>
+  已 <b>fail-closed</b>（预期 hash 为空即拒绝，:398-399），但预期值来自<b>同一个 GitHub Release</b> 的 body / 侧车文件，与 zip 同源同 TLS 通道。</td>
+  <td class="act"><b>风险：</b>能防"发布忘附 hash"和意外损坏，但防不住"能发 Release 的攻击者同时替换 zip 与 hash"，也防不住受陷的 GitHub 账号。代码注释（:394-396）对防护强度有夸大，容易给人虚假安全感。<br>
+  <b>建议：</b>引入离线签名（内置 Ed25519 公钥验签），私钥不进 GitHub。这是供应链攻击的标准解法。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>DES-07</td>
+  <td class="loc">app.py:38-48<br>data_center/backup/backup_restorer.py:330,351,362</td>
+  <td class="issue"><span class="it">学员 PII 明文写入持久日志，无清理策略</span>
+  <code>RotatingFileHandler</code> 写 <code>~/.shangmentiyu/app.log</code>（10MB × 3 轮转，无留存清理）；多处日志含学员姓名与完整路径。
+  <pre>logging.error(f'创建档案失败 [{effective_name}]：{file_path}')</pre></td>
+  <td class="act"><b>风险：</b>未成年人姓名经异常路径明文持久化在用户目录，无加密、无清理期限。<br>
+  <b>建议：</b>日志脱敏（姓名→学员 ID 哈希），并设置最短留存 + 定期清理。</td>
+</tr>
+</tbody>
+</table>
+
+<div class="note good">
+  <h4>桌面端安全正面实践（经逐一核查确认）</h4>
+  <ul style="margin-bottom:0">
+    <li><b>无危险反序列化</b>：全仓无 <code>pickle.load</code> / <code>marshal</code> / <code>eval</code> / <code>exec</code> / <code>subprocess(shell=True)</code>。grep 命中的 <code>dlg.exec()</code> 是 Qt 对话框方法，非 Python exec。</li>
+    <li><b>网络调用规范</b>：所有 <code>requests</code> 均带 timeout（<code>(15,30)</code> / <code>(15,60)</code>），<b>无 verify=False</b>，GitHub API 与下载全走 HTTPS。</li>
+    <li><b>临时文件规范</b>：一律 <code>tempfile.*</code>，无硬编码 <code>/tmp</code>。</li>
+    <li><b>恢复链路三层回滚</b>：恢复前自动备份 → 时光机快照 <code>_db_snapshots</code> → 恢复后自动备份。</li>
+    <li><b>分层清晰</b>：UI 层无直接 <code>load_workbook</code> / <code>sqlite3.connect</code> 的反例，全部经 profile_manager / storage 访问。</li>
+  </ul>
+</div>
+
+<h3>2.3 依赖管理<span class="cn">DEPENDENCIES</span></h3>
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>风险与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-08</td>
+  <td class="loc">requirements.txt:22<br>pyproject.toml:15-22</td>
+  <td class="issue"><span class="it">依赖锁定策略自相矛盾</span>
+  <code>requirements.txt</code> 中 <code>portalocker&gt;=2.7.0</code> 未 pin（其余均为 <code>==</code>）；<code>pyproject.toml</code> 则<b>全部</b>用宽泛 <code>&gt;=</code>：<code>PySide6&gt;=6.5.0</code> / <code>openpyxl&gt;=3.1.0</code> / <code>requests&gt;=2.28.0</code>。</td>
+  <td class="act"><b>风险：</b>新环境 / CI 可能拉入破坏性主版本（PySide6 6.5 → 6.11 有 API 差异），复现性无保证。桌面端是打包分发，构建不可复现直接导致"我这里好的"。<br>
+  <b>建议：</b>requirements.txt 全量 <code>==</code> pin；pyproject 依赖同步为 <code>==</code> 或用 <code>pip-tools</code> 维护 lock 文件。<br>
+  <span class="ev">正面：未发现失真的 requirements.lock 残留；无已弃用库。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>DES-09</td>
+  <td class="loc">requirements.txt:7</td>
+  <td class="issue"><span class="it">PySide6 为 LGPL，闭源分发有合规义务</span>
+  <code>PySide6==6.11.1</code></td>
+  <td class="act"><b>风险：</b>LGPL 不传染，但闭源打包分发需保证用户可替换 / 重新链接该库（提供对应 .so/.dll）。<br><b>建议：</b>打包时附带 PySide6 的动态库与目标文件说明，或改用 PyQt 商业授权。<br>
+  <span class="ev">正面：openpyxl(MIT)、requests(Apache-2.0)、python-docx(MIT)、Pillow(HPND)、portalocker(Unlicense) 均无传染风险。</span></td>
+</tr>
+</tbody>
+</table>
+
+<!-- ==================== DESKTOP UI ==================== -->
+<h2><span class="num">03</span>桌面端 · 前端 UI</h2>
+<div class="h2sub">PySide6 / Qt6 界面层 · 无 setGeometry 绝对定位 · 跨线程一律走信号</div>
+
+<table>
+<thead><tr><th style="width:52px"></th><th style="width:210px">位置</th><th>问题</th><th>影响与建议</th></tr></thead>
+<tbody>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>DES-10</td>
+  <td class="loc">excel_builder.py:40,77<br>student_profile/profile_storage.py:471,487<br>lesson_manager.py:41<br>auto_sync.py:341</td>
+  <td class="issue"><span class="it">数据保存 / 导出路径静默吞异常</span>
+  <code>except Exception:</code> 直接吞掉，无日志、无提示。全仓宽泛 except 块达 <b>276 处</b>，其中落在写 Excel / 写库存档路径上的最危险。</td>
+  <td class="act"><b>风险：</b>写档失败被静默忽略 —— 用户以为存了，实际没存。这是<b>数据丢失的第二种形态</b>（第一种是 DES-01）。<br>
+  <b>建议：</b>所有写路径的 except 至少 <code>logging.exception()</code> + 用户可见提示；对 276 处做一次分类清理，区分"预期异常可忽略"与"必须上报"。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>DES-11</td>
+  <td class="loc">app.py:46-48</td>
+  <td class="issue"><span class="it">全局 excepthook 仅写日志，无用户提示</span>
+  <code>sys.excepthook = lambda ...: logging.critical(...)</code>。PySide6 槽函数异常被 Qt 自行吞掉打到 stderr，此处不弹窗、不触发保存。</td>
+  <td class="act"><b>风险：</b>用户无感知崩溃；若异常发生在保存前，数据丢失且无任何告警。<br>
+  <b>建议：</b>加一个 QMessageBox 提示 + "尝试保存当前工作"的钩子，至少让用户知道出事了。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p1">P1</span><br>DES-12</td>
+  <td class="loc">test_tool.py / test_updater_security.py<br>test_db_snapshot_scope.py<br>test_growth_processor.py / training_tool/test_export.py</td>
+  <td class="issue"><span class="it">核心数据层与 UI 层零测试，无 CI</span>
+  5 个测试文件约 107 处断言。经 grep 确认 <code>file_lock</code> / <code>worker_pool</code> / <code>profile_storage</code> / <code>lesson_manager</code> / <code>auto_sync</code> 在测试中<b>无任何引用</b>。无 <code>conftest.py</code>、无 <code>.github/workflows</code>、无 coverage 配置。</td>
+  <td class="act"><b>风险：</b>数据层与同步逻辑回归无保障，UI 层完全无测试。每次改动都是"盲改"。<br>
+  <b>建议：</b>① 优先给 <code>profile_storage</code> 的读写往返 + <code>file_lock</code> 的互斥行为补测试；② 接 GitHub Actions 跑 pytest；③ 加 <code>--cov</code> 设一个宽松阈值（比如 30%）先卡住劣化。<br>
+  <span class="ev">正面：scorer/standards 评分逻辑、更新器 Zip-Slip 与 SHA256 fail-closed、快照作用域均有针对性回归测试，含 parametrize —— 这几块做得扎实。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-13</td>
+  <td class="loc">base_components.py（ColorPalette #FF6B47）<br>training_tool/styles.py:30（Palette #5B6BF7）<br>stage_summary_screen.py:43（HeroCard 蓝紫渐变）</td>
+  <td class="issue"><span class="it">两套并行主题系统，视觉语言分裂</span>
+  全局珊瑚橙 <code>#FF6B47</code> + <code>theme.py:LIGHT_QSS</code>；训练模块独立定义强调色 <code>#5B6BF7</code> 蓝紫，HeroCard 用蓝紫渐变。</td>
+  <td class="act"><b>影响：</b>训练模块与档案 / 数据中心外观割裂；后续换肤要改两处。<br>
+  <b>建议：</b>合并为单一 ColorPalette，训练模块的强调色作为 accent 变体纳入。这也与李哥在 Android 端统一的 iOS 风格设计系统对齐。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-14</td>
+  <td class="loc">profile_dialogs.py:89,137,140<br>profile_screen.py:140,230<br>data_center_window.py:87<br>全仓 setStyleSheet 约 50+ 处</td>
+  <td class="issue"><span class="it">硬编码颜色绕过调色板</span>
+  多数 <code>setStyleSheet</code> 直接写 hex（<code>#6B6B6B</code> / <code>#FF6B47</code> / <code>#34D399</code>），未引用 <code>ColorPalette</code>。<code>theme.py:363-364</code> 中 <code>DARK_QSS = LIGHT_QSS</code>，深色模式被刻意关闭。</td>
+  <td class="act"><b>影响：</b>配色漂移，无法统一调整，深色模式无实现基础。<br><b>建议：</b>颜色集中到 ColorPalette，setStyleSheet 改为 f-string 引用调色板。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-15</td>
+  <td class="loc">profile_screen.py:122-123<br>profile_dialogs.py:183</td>
+  <td class="issue"><span class="it">业务常量散落 UI 层</span>
+  续费阈值 <code>≤3 课时红 / ≤6 课时黄</code>、年龄分界 <code>age &lt; 7 → 学龄前</code>，多处重复且无集中常量。</td>
+  <td class="act"><b>建议：</b>抽到 <code>standards.py</code> 或 <code>constants.py</code>。业务规则变更时改一处即可。</td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p2">P2</span><br>DES-16</td>
+  <td class="loc">profile_dialogs.py:66, :275</td>
+  <td class="issue"><span class="it">手机号无校验</span>
+  <code>le_phone</code> 为自由文本，保存未做格式 / 长度校验（姓名有 <code>if not name</code> 校验于 :254）。</td>
+  <td class="act"><b>风险：</b>脏数据入库，导出 / 同步时可能异常。<br><b>建议：</b>加 QValidator（11 位手机号正则）。<br>
+  <span class="ev">正面：数值输入由 QSpinBox/QDoubleSpinBox 强制范围（年龄 3–30、身高 50–220、体重 10–150），日期用 QDateEdit —— 这部分做得对。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>DES-17</td>
+  <td class="loc">training_tool/ui_template_screen.py:147-659</td>
+  <td class="issue"><span class="it">God 类 SingleTab（约 500 行）</span>
+  同时负责：任务列表 UI(<code>_refresh_task_list</code> :406)、区块 CRUD(:476/485/497)、习题选择(:507)、推荐算法(:659)、持久化(:464)、学员刷新(:640)。</td>
+  <td class="act"><b>建议：</b>按"列表渲染 / 区块编辑 / 推荐算法 / 持久化"拆四个类。<br>
+  <span class="ev">正面：<code>profile_screen.py</code> 已从 926 行成功拆为 profile_dialogs / profile_handlers / profile_lesson_dialog（源码仅 241 行）—— 这个拆法可以复制到 ui_template_screen。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>DES-18</td>
+  <td class="loc">全仓（grep 零命中）<br>accessibleName / setShortcut / QTranslator</td>
+  <td class="issue"><span class="it">无障碍与国际化完全缺失</span>
+  无 <code>accessibleName</code>、无 <code>setShortcut</code>、无 <code>QTranslator</code>/<code>tr()</code>，全中文硬编码。</td>
+  <td class="act"><b>影响：</b>屏幕阅读器不可用、无键盘可达性；无法国际化。<br>
+  <b>建议：</b>至少给关键按钮补 shortcut 与 accessibleName（成本低）；国际化若不在规划内可暂缓。<br>
+  <span class="ev">正面：约 25 处 setToolTip 已覆盖关键按钮。</span></td>
+</tr>
+<tr>
+  <td class="id"><span class="sev s-p3">P3</span><br>DES-19</td>
+  <td class="loc">全仓（grep WA_DeleteOnClose 零命中）</td>
+  <td class="issue"><span class="it">无 WA_DeleteOnClose</span>
+  对话框均 <code>exec()</code> 模态，靠 GC 回收；若有 <code>show()</code> 非模态实例则会泄漏。</td>
+  <td class="act"><b>建议：</b>长期运行内存缓慢增长风险。给非模态对话框补 <code>setAttribute(Qt.WA_DeleteOnClose)</code>。</td>
+</tr>
+</tbody>
+</table>
+
+<div class="note good">
+  <h4>桌面端 UI 正面实践</h4>
+  <ul style="margin-bottom:0">
+    <li><b>无 setGeometry 绝对定位</b>（grep 零命中），全部用 QVBoxLayout/QHBoxLayout/QGridLayout —— DPI 与缩放安全，很多 Qt 项目做不到这点。</li>
+    <li><b>跨线程 UI 操作全部合规</b>：<code>SyncWorker</code> / <code>UpdateWorker</code> / <code>AutoBackupManager</code> 均通过 Signal 回主线程，未发现 worker 内直接操作 widget。</li>
+    <li><b>worker_pool 设计规范</b>：<code>_MAX_CONCURRENT=2</code> 封顶保护磁盘 IO，<code>setAutoDelete(True)</code> 防线程泄漏，<code>run()</code> 内 try/except 兜底。</li>
+    <li><b>QPainter 资源正确释放</b>：paintEvent 内均调用 <code>painter.end()</code>。</li>
+    <li><b>AutoBackupManager 正确清理线程</b>：<code>thread.finished → worker.deleteLater</code>。</li>
+  </ul>
+</div>
+
+<!-- ==================== RISK ==================== -->
+<h2><span class="num">04</span>整体风险评估</h2>
+<div class="h2sub">按"发生概率 × 影响程度"二维定位，聚焦真正需要现在处理的风险</div>
+
+<table>
+<thead><tr><th style="width:190px">风险场景</th><th style="width:90px">概率</th><th style="width:90px">影响</th><th>说明与关联项</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>主数据文件损坏</b></td>
+  <td><b>中高</b></td>
+  <td class="c-p0"><b>灾难级</b></td>
+  <td>8 处非原子写 + 锁删除反模式 + 读未加锁，三者叠加。写入中断一次即可能丢失整个档案目录。这是<b>当前最大的单点风险</b>，但也是最容易修的（约 30 行）。关联 DES-01 / DES-02 / DES-03。</td>
+</tr>
+<tr>
+  <td><b>学员信息明文泄露</b></td>
+  <td><b>中</b></td>
+  <td class="c-p0"><b>严重</b></td>
+  <td>Room 明文 + 备份 ZIP 明文 + allowBackup + 密钥种子明文，形成一条完整泄露链。设备丢失或备份外发即触发。涉及未成年人个人信息，有合规责任。关联 AND-01/02/03/04。</td>
+</tr>
+<tr>
+  <td><b>伪造心跳劫持照片上传</b></td>
+  <td>低</td>
+  <td class="c-p1"><b>严重</b></td>
+  <td>需要攻击者与目标同处一个局域网（培训机构公共 WiFi 是现实场景）。一旦发生，学员照片直接外泄到攻击者主机。关联 AND-06。</td>
+</tr>
+<tr>
+  <td><b>静默数据丢失</b></td>
+  <td><b>中</b></td>
+  <td class="c-p1"><b>高</b></td>
+  <td>写路径 except 吞异常 + 全局 excepthook 无提示。用户以为保存成功，实际失败。与"文件损坏"不同，这个是<b>悄无声息</b>的，往往几周后才发现。关联 DES-10 / DES-11。</td>
+</tr>
+<tr>
+  <td><b>重构引发回归</b></td>
+  <td><b>高</b></td>
+  <td class="c-p2"><b>中</b></td>
+  <td>31 个 Android God 类 + 桌面端核心数据层零测试。任何人动这些文件都是"盲改"，且没有 CI 与覆盖率门禁兜底。关联 AND-10 / AND-17 / DES-12。</td>
+</tr>
+<tr>
+  <td><b>供应链投毒（更新通道）</b></td>
+  <td>低</td>
+  <td class="c-p2"><b>高</b></td>
+  <td>两端更新均依赖 GitHub Release，桌面端为同信道哈希、Android 端已有 UpdateIntegrity。GitHub 账号失陷是唯一前提，概率低但影响面覆盖全部用户。关联 DES-06。</td>
+</tr>
+</tbody>
+</table>
+
+<div class="note">
+  <h4>风险评估的一句话总结</h4>
+  <p style="margin:0"><b>最紧迫的不是"被黑客攻击"，而是"自己把数据弄丢"。</b>三个 P0 里，DES-01（xlsx 非原子写）修起来只要 30 行代码，却能消除最大的单点风险 —— 建议今天就做。Android 端的加密改造工作量大得多，但可以先做 allowBackup=false 和日志剥离这两个低成本动作，把最容易触发的泄露路径先堵上。</p>
+</div>
+
+<!-- ==================== ROADMAP ==================== -->
+<h2><span class="num">05</span>优先级修复清单</h2>
+<div class="h2sub">按"投入产出比"排序，而非单纯按严重度 —— 能今天做完的排在前面</div>
+
+<div class="phase">
+  <div class="hd"><span>第一批 · 立即处理</span><small>低成本 / 消除最紧迫风险 · 预计 1–2 天</small></div>
+  <table>
+  <thead><tr><th>动作</th><th>位置</th><th>工作量</th></tr></thead>
+  <tbody>
+    <tr><td><b>封装 atomic_save_workbook 并替换 8 处调用</b><br><span style="color:var(--muted);font-size:12.5px">mkstemp 同目录 → save → os.replace。消除主数据损坏风险。</span></td><td class="loc">profile_storage.py ×6<br>lesson_manager.py:26<br>excel_builder.py:424</td><td>约 30 行</td></tr>
+    <tr><td><b>关闭 allowBackup，移除 requestLegacyExternalStorage</b><br><span style="color:var(--muted);font-size:12.5px">一行改动，堵住 adb backup 整包拖走的路径。</span></td><td class="loc">AndroidManifest.xml:33,39</td><td>2 行</td></tr>
+    <tr><td><b>release 剥离 Log</b><br><span style="color:var(--muted);font-size:12.5px">proguard 加 assumenosideeffects，消除 logcat 泄露学员姓名。</span></td><td class="loc">app/proguard-rules.pro</td><td>3 行</td></tr>
+    <tr><td><b>文件锁不再删除 .lock 文件</b><br><span style="color:var(--muted);font-size:12.5px">去掉 finally 中的 os.remove，恢复跨进程互斥。</span></td><td class="loc">file_lock.py:97-101</td><td>4 行</td></tr>
+    <tr><td><b>课时读取补锁</b><br><span style="color:var(--muted);font-size:12.5px">照抄 profile_storage.py:187 的读锁写法。</span></td><td class="loc">lesson_manager.py:203,225</td><td>2 处</td></tr>
+    <tr><td><b>手动恢复路径统一走 validate_backup_zip</b><br><span style="color:var(--muted);font-size:12.5px">让手动与自动两条路径用同一套校验。</span></td><td class="loc">backup_restorer.py:68</td><td>1 行</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<div class="phase">
+  <div class="hd"><span>第二批 · 近期规划</span><small>中等成本 / 合规与质量 · 预计 1–2 周</small></div>
+  <table>
+  <thead><tr><th>动作</th><th>位置</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><b>Room 引入 SQLCipher</b><br><span style="color:var(--muted);font-size:12.5px">P0。密钥由 Android Keystore 托管，需处理 v34 迁移。</span></td><td class="loc">AppDatabase.kt<br>libs.versions.toml</td><td>过渡方案：仅加密 phone/name 字段</td></tr>
+    <tr><td><b>备份 ZIP 加密</b><br><span style="color:var(--muted);font-size:12.5px">P0。复用 PhotoCrypto 的 PBKDF2 + AES-GCM，强制用户设口令。</span></td><td class="loc">BackupManager.kt:189</td><td>需设计旧备份兼容路径</td></tr>
+    <tr><td><b>PhotoCrypto 密钥种子迁回 Keystore</b><br><span style="color:var(--muted);font-size:12.5px">旧版 EncryptedFile 方案本就正确，直接回退。</span></td><td class="loc">PhotoCrypto.kt:126-130</td><td>需保留旧种子解密历史照片</td></tr>
+    <tr><td><b>写路径异常不再静默</b><br><span style="color:var(--muted);font-size:12.5px">276 处宽泛 except 分类清理，写路径必须 logging + 用户提示。</span></td><td class="loc">excel_builder.py<br>profile_storage.py<br>auto_sync.py</td><td>先清写路径，读路径可缓</td></tr>
+    <tr><td><b>全局 excepthook 加用户提示</b></td><td class="loc">app.py:46-48</td><td>QMessageBox + 尝试保存</td></tr>
+    <tr><td><b>UDP 发现加 HMAC 签名</b></td><td class="loc">UdpDesktopDiscoveryService.kt:180-202</td><td>两端预共享密钥或首次配对白名单</td></tr>
+    <tr><td><b>UI 直连 DB 改走 Repository</b><br><span style="color:var(--muted);font-size:12.5px">顺带解决 AND-12 的 N+1 订阅。</span></td><td class="loc">PreClassScheduleCard.kt:121<br>SettingsViewModel.kt:954</td><td>抽 PlanImageRepository</td></tr>
+    <tr><td><b>桌面端依赖全量 pin + 接 CI</b></td><td class="loc">requirements.txt<br>pyproject.toml</td><td>GitHub Actions 跑 pytest</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<div class="phase">
+  <div class="hd"><span>第三批 · 持续偿还</span><small>长期工程债 / 按迭代节奏推进</small></div>
+  <table>
+  <thead><tr><th>动作</th><th>目标</th></tr></thead>
+  <tbody>
+    <tr><td><b>拆分 God 类</b><br><span style="color:var(--muted);font-size:12.5px">优先 BackupManager(963) 拆 Zip 读/写/校验（照搬桌面端 data_center/backup/ 的拆法），再动 SettingsViewModel(1244) 与 PreClassTab(1485)。</span></td><td>31 个 &gt;500 行文件降至 10 个以内</td></tr>
+    <tr><td><b>补核心测试</b><br><span style="color:var(--muted);font-size:12.5px">优先 PhotoCrypto 往返加解密 + 旧格式兼容；桌面端 profile_storage 读写往返 + file_lock 互斥。</span></td><td>安全与数据路径有回归保障</td></tr>
+    <tr><td><b>CI 加覆盖率门禁</b><br><span style="color:var(--muted);font-size:12.5px">Android 端 jacoco、桌面端 pytest-cov，先设宽松阈值卡住劣化。</span></td><td>覆盖率从"黑盒"变可见</td></tr>
+    <tr><td><b>桌面端主题系统合并</b><br><span style="color:var(--muted);font-size:12.5px">两套调色板合一，硬编码 hex 收编，为深色模式留基础。</span></td><td>视觉语言统一</td></tr>
+    <tr><td><b>更新通道改离线签名</b><br><span style="color:var(--muted);font-size:12.5px">Ed25519 公钥内置，私钥不进 GitHub。</span></td><td>供应链攻击防护</td></tr>
+    <tr><td><b>业务常量集中化 + 文案资源化</b></td><td>阈值变更只改一处</td></tr>
+    <tr><td><b>LazyColumn 补 contentType、历史列表迁 Paging</b></td><td>长列表滚动性能</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<div class="foot">
+  审查方式：四路并行静态审查（Android 架构性能 / Android 安全依赖 / 桌面端后端数据 / 桌面端前端 UI）+ 关键结论独立复核（Room 加密、xlsx 原子写、日志剥离、测试计数、文件锁释放均已二次验证）。<br>
+  所有结论均附文件路径与行号，可逐条定位核实。未找到实证的问题不予列入；明确的正面实践已单独标注，避免"只报忧"导致误判项目真实质量。<br>
+  <b style="color:var(--ink2)">生成时间 2026-09-04 · 上门体育技术审查 v4</b>
+</div>
+
+</div>
+</body>
+</html>

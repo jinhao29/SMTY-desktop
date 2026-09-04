@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 420">
+<circle cx="210.0" cy="210.0" r="198" fill="none" stroke="#fff" stroke-width="7"/>
+<circle cx="210.0" cy="210.0" r="150" fill="none" stroke="#fff" stroke-width="3"/>
+<defs><path id="arcTop" d="M38.0,210.0 A172,172 0 0 1 382.0,210.0" fill="none"/></defs>
+<text fill="#fff" font-family="Arial, sans-serif" font-weight="bold" font-size="32" letter-spacing="7"><textPath href="#arcTop" startOffset="50%" text-anchor="middle">EVOLVE SPORTS CLUB</textPath></text>
+<circle cx="42" cy="210.0" r="7" fill="#fff"/>
+<circle cx="378" cy="210.0" r="7" fill="#fff"/>
+<path d="M164.0,212 L210.0,182 L256.0,212" fill="none" stroke="#fff" stroke-width="18"/>
+<path d="M155.0,176 L210.0,146 L265.0,176" fill="none" stroke="#fff" stroke-width="18"/>
+<path d="M146.0,140 L210.0,110 L274.0,140" fill="none" stroke="#fff" stroke-width="18"/>
+<text x="210.0" y="292" text-anchor="middle" fill="#fff" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-weight="700" font-size="50" letter-spacing="12">进化体育</text>
+<text x="210.0" y="332" text-anchor="middle" fill="#fff" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-weight="400" font-size="20" letter-spacing="16">俱乐部</text>
+</svg>

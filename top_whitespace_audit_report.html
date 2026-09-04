@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Android 页面顶部空白全量排查报告</title>
+<style>
+  :root{
+    --bg:#F2F4F8; --card:#FFFFFF; --ink:#1F2430; --sub:#6B7280;
+    --brand:#3B82F7; --p0:#DC2626; --p1:#EA580C; --p2:#2563EB; --ok:#059669;
+    --line:#E5E7EB; --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;padding:32px 16px}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{font-size:24px;margin-bottom:4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:24px}
+  .card{background:var(--card);border-radius:var(--radius);padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  h2{font-size:17px;margin-bottom:10px;padding-left:10px;border-left:4px solid var(--brand)}
+  code{background:#EEF1F6;border-radius:4px;padding:1px 6px;font-size:13px;font-family:Consolas,monospace}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#F8FAFC;font-weight:600;white-space:nowrap}
+  .tag{display:inline-block;border-radius:10px;padding:0 8px;font-size:12px;color:#fff;white-space:nowrap}
+  .t-p1{background:var(--p1)} .t-p2{background:var(--p2)} .t-ok{background:var(--ok)}
+  .code-block{background:#0F172A;color:#E2E8F0;border-radius:8px;padding:12px 16px;font-family:Consolas,monospace;font-size:13px;overflow-x:auto;margin-top:8px;white-space:pre}
+  ul{padding-left:20px;margin-top:6px}
+  li{margin:3px 0}
+  .note{color:var(--sub);font-size:12.5px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Android 页面顶部空白全量排查报告</h1>
+<div class="meta">仓库：android_app（com.shangmentiyu.sportscoach） · 排查时间：2026-09-02 · 范围：全部 Screen / Tab（24 Screen + 10 Tab + 外壳与通用组件）</div>
+
+<div class="card">
+<h2>一、根因：双重状态栏避让（系统性）</h2>
+<p><b>证据链：</b></p>
+<ul>
+  <li><code>MainActivity</code> 调用 <code>enableEdgeToEdge()</code>，状态栏 inset 生效；</li>
+  <li>外层 <code>SportsApp.kt</code> 的 Scaffold：<code>topBar</code> 为桌面连接横幅（隐藏时高度 = 0），M3 Scaffold 在 topBar 无高度时按默认 <code>contentWindowInsets = systemBars</code> 将<b>状态栏高度计入 innerPadding</b> → NavHost 内所有页面已经从状态栏下方开始；</li>
+  <li>内层各页面自行使用 M3 <code>TopAppBar</code>，其默认 <code>windowInsets = TopAppBarDefaults.windowInsets</code>（状态栏），<b>又在顶栏内部避让了一次状态栏</b> → 顶栏上方多出约 24–48dp 重复空白。</li>
+</ul>
+<p>代码库自身注释可交叉印证：<code>HomeScreen.kt:101</code>「contentWindowInsets 设为 0，避免 Scaffold 默认 inset 叠加」；<code>CoachManageScreen.kt:106</code>「外层 SportsApp Scaffold 已消费状态栏 inset，此处归零避免双重留白」——即 coach 模块的已修复项用的就是此结论。</p>
+
+<div class="code-block">// ✅ 已修复参照（CoachManageScreen.kt:107）
+TopAppBar(
+    title = { Text("教练管理", fontWeight = FontWeight.SemiBold) },
+    // 外层 SportsApp Scaffold 已消费状态栏 inset，此处归零避免双重留白
+    windowInsets = WindowInsets(0, 0, 0, 0),
+    colors = glassTopAppBarColors()
+)</div>
+</div>
+
+<div class="card">
+<h2>二、排查结论对照表（19 处问题 / 19 个文件）</h2>
+<table>
+<tr><th>#</th><th>文件（路径省略 ui/ 前缀）</th><th>截图对应页面</th><th>问题</th><th>级别</th></tr>
+<tr><td>1</td><td><code>lessoncheckin/LessonCheckInScreen.kt:307</code></td><td><b>上课签到（本次截图页，未签退筛选列表）</b></td><td>TopAppBar 默认 insets → 双重状态栏空白</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>2</td><td><code>schedule/ScheduleTopBars.kt:78、136</code>（ScheduleScreen 引用）</td><td>课表（含多选模式顶栏，共 2 处）</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>3</td><td><code>lesson/LessonScreen.kt:69</code></td><td>课时详情 / 学员详情链路</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>4</td><td><code>summary/SummaryScreen.kt:127</code></td><td>课后小结</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>5</td><td><code>scoring/ScoringScreen.kt:61</code></td><td>体测成绩录入（数据记录）</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>6</td><td><code>growth/GrowthScreen.kt:191</code></td><td>成长报告</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>7</td><td><code>home/AddStudentScreen.kt:145</code></td><td>添加/编辑学员（独立路由，非弹窗）</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>8</td><td><code>training/TrainingPlanScreen.kt:90</code></td><td>AI 训练计划</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>9</td><td><code>heightprediction/HeightPredictionScreen.kt:126</code></td><td>身高预测</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>10</td><td><code>diet/DietManageScreen.kt:161</code></td><td>饮食管理</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>11</td><td><code>coachreport/CoachDailyReportScreen.kt:75</code></td><td>教练日报</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>12</td><td><code>bodymetric/BodyMetricChartScreen.kt:83</code></td><td>体型变化曲线</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>13</td><td><code>stagesummary/StageSummaryScreen.kt:61</code></td><td>阶段性总结</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>14</td><td><code>trainingcycle/TrainingCycleScreen.kt:74</code></td><td>周期训练计划</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>15</td><td><code>tools/BmiCalculatorScreen.kt:78</code></td><td>BMI 计算器</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>16</td><td><code>script/ScriptListScreen.kt:94</code></td><td>话术管理</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>17</td><td><code>script/ScriptDetailScreen.kt:104</code></td><td>编辑/新建话术</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>18</td><td><code>parent/ParentReportScreen.kt:86</code></td><td>家长服务</td><td>同上</td><td><span class="tag t-p1">P1</span></td></tr>
+<tr><td>19</td><td><code>sportcategory/SportStandardDetailScreen.kt:81</code></td><td>中考标准详情</td><td><b>变体</b>：<code>contentWindowInsets=WindowInsets(0)</code> 后又手写 <code>.statusBarsPadding()</code>，与外层避让叠加</td><td><span class="tag t-p1">P1</span></td></tr>
+</table>
+
+<h2 style="margin-top:20px">无问题页面（已修复/正确）</h2>
+<table>
+<tr><th>文件</th><th>状态</th></tr>
+<tr><td><code>home/HomeScreen.kt</code>（含 PreClassTab / LessonManageTab / PostClassTab / StudentListTab）</td><td><span class="tag t-ok">OK</span> 无 topBar + contentWindowInsets=0，胶囊 Tab 紧贴状态栏</td></tr>
+<tr><td><code>score/ScoreScreen.kt</code>（含 ScoreInputTab / ScoreViewTab）</td><td><span class="tag t-ok">OK</span> contentWindowInsets=0</td></tr>
+<tr><td><code>settings/SettingsScreen.kt</code></td><td><span class="tag t-ok">OK</span> contentWindowInsets=0</td></tr>
+<tr><td><code>sportcategory/SportCategoryScreen.kt</code></td><td><span class="tag t-ok">OK</span> contentWindowInsets=0</td></tr>
+<tr><td><code>coach/CoachManageScreen.kt</code>（含档案/排课/工作量/团队/薪资 5 Tab）</td><td><span class="tag t-ok">OK</span> 已修复（TopAppBar windowInsets=0）</td></tr>
+</table>
+<p class="note">说明：coach 4 个 Tab 内的 <code>Spacer(160.dp)</code> 为列表<b>底部</b>留白（避开悬浮导航栏），非顶部问题。</p>
+
+<h2 style="margin-top:20px">P2 附加项</h2>
+<table>
+<tr><th>位置</th><th>问题</th></tr>
+<tr><td><code>LessonCheckInScreen.kt:347-357</code>（常规模式）与 <code>:851-860</code>（未签退筛选列表）</td><td>LazyColumn <code>contentPadding top=16dp</code> + Large-Title 前 <code>Spacer(16dp)</code> = 顶栏下方再叠 32dp。属 iOS Large-Title 风格有意留白，但按「≤8dp 额外间距」标准可压缩（建议保留 contentPadding、移除 Spacer 或降至 4dp）</td></tr>
+<tr><td><code>SportsApp.kt:264</code> DesktopConnectionBanner</td><td>顶栏横幅自身无 statusBarsPadding，在线时会被状态栏压住（低频场景，顺带修）</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>三、统一修复方案（最小 diff，沿用 CoachManageScreen 已验证写法）</h2>
+<p><b>方案 A（推荐，19 处一行修改）</b>：全部问题 TopAppBar 统一增加 <code>windowInsets = WindowInsets(0, 0, 0, 0)</code>；SportStandardDetailScreen 则<b>删除</b> <code>.statusBarsPadding()</code>。</p>
+<div class="code-block">// 每处仅增一行（import androidx.compose.foundation.layout.WindowInsets 已在多数文件存在，缺则补）
+TopAppBar(
+    title = { Text("上课签到") },
+    windowInsets = WindowInsets(0, 0, 0, 0),   // ← 新增：外层已消费状态栏 inset
+    ...
+)
+
+// SportStandardDetailScreen.kt:81 反向修改（删一行）
+Row(
+    modifier = Modifier
+        .fillMaxWidth()
+        // .statusBarsPadding()   ← 删除：外层 inset 已由 SportsApp 统一避让
+        .padding(horizontal = 4.dp),
+)</div>
+<p><b>方案 B（可选进阶，二期）</b>：在 <code>ui/theme/GlassCard.kt</code> 旁抽一个共享 <code>AppTopBar()</code>（内置 <code>windowInsets=0</code> + <code>glassTopAppBarColors()</code>），新页面一律复用，杜绝再犯。一期先用方案 A 收敛存量。</p>
+<p><b>不推荐</b>：反转约定（外层 contentWindowInsets=0、内层默认避让）——虽只改 5 处，但会推翻 HomeScreen/SettingsScreen 已固化的「胶囊紧贴状态栏」布局，回归风险高。</p>
+
+<h2 style="margin-top:16px">验证步骤（真机收口）</h2>
+<div class="code-block">cd android_app
+./gradlew assembleDebug
+./gradlew installDebug
+adb logcat -c && adb logcat AndroidRuntime:E *:S</div>
+<ul>
+  <li>逐页检查：顶栏起始位置 = 状态栏高度 + 64dp，无额外 24–48dp 空隙；</li>
+  <li>重点复验截图页：上课签到 → 「退出筛选/未签退课时」列表顶部；</li>
+  <li>回归四张已修复 Tab（主页/成绩查看/教练管理/设置），确认胶囊位置不变。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>四、排查范围澄清（用户清单 vs 实际文件）</h2>
+<table>
+<tr><th>清单中的名称</th><th>实际对应</th></tr>
+<tr><td>学员详情 StudentDetailScreen</td><td>不存在独立文件；链路为 StudentListTab → LessonScreen / GrowthScreen（均已列入排查）</td></tr>
+<tr><td>添加学员弹窗 StudentAddDialog</td><td>实为独立路由 <code>AddStudentScreen</code>（已列入）</td></tr>
+<tr><td>周课表 WeekScheduleScreen</td><td>即 <code>ScheduleScreen</code>（已列入）</td></tr>
+<tr><td>教练排班 CoachScheduleScreen / 教练薪资 CoachPayoutScreen</td><td>即 CoachManageScreen 内 <code>CoachScheduleTab</code> / <code>CoachPayrollTab</code>（已修复，无问题）</td></tr>
+<tr><td>数据中心 DataCenterScreen</td><td>Android 端不存在（属桌面端 student_sports_tool）</td></tr>
+</table>
+</div>
+
+</div>
+</body>
+</html>
