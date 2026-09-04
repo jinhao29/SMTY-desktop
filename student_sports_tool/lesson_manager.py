@@ -27,6 +27,16 @@ def _save_wb(fpath, wb):
         atomic_save_workbook(wb, fpath)
 
 
+def _load_wb(fpath):
+    """Load workbook under file lock：防止读到另一进程写入中的半写文件。
+
+    写路径（set/add/delete/update）与读路径（get_*）统一走这里，
+    锁只在 load 期间持有，load 完成即释放，不与 _save_wb 嵌套。
+    """
+    with file_lock(fpath, mode='r'):
+        return load_workbook(fpath)
+
+
 def _invalidate_meta_index(dir_path: str = ''):
     """通知 data_center 的 SQLite 索引失效（数据修改后必须调用）。
 
@@ -201,8 +211,7 @@ def _rebuild_summary(wb, records):
 def get_summary(dir_path):
     """读取所有学员的课时汇总，返回列表。每条：{name,total,attended,remaining,last_date,note}。"""
     fpath = _ensure_file(dir_path)
-    with file_lock(fpath, mode='r'):
-        wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     records = _read_detail(wb)
     old_map = _read_summary_map(wb)
     all_names = set(old_map.keys()) | {rec['name'] for rec in records}
@@ -224,8 +233,7 @@ def get_summary(dir_path):
 def get_detail(dir_path, name=None):
     """读取课时明细记录。name 指定时只返回该学员的记录。"""
     fpath = _ensure_file(dir_path)
-    with file_lock(fpath, mode='r'):
-        wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     records = _read_detail(wb)
     if name:
         records = [r for r in records if r['name'] == name]
@@ -235,7 +243,7 @@ def get_detail(dir_path, name=None):
 def set_total_lessons(dir_path, name, total):
     """设置/修改某学员的总课时数。学员不存在于汇总表则新增一行。"""
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     ws = wb['汇总']
     # 查找已有行
     target_row = None
@@ -272,7 +280,7 @@ def set_remaining_lessons(dir_path, name, remaining):
     if remaining < 0:
         return False
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     # 读取当前已上课时
     records = _read_detail(wb)
     attended = _calc_attended(records, name)
@@ -303,7 +311,7 @@ def get_lesson_summary(dir_path, name):
     返回: {name, total, attended, remaining, last_date, note}
     """
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     records = _read_detail(wb)
     old_map = _read_summary_map(wb)
     if name not in old_map and not any(r['name'] == name for r in records):
@@ -331,7 +339,7 @@ def add_lesson(dir_path, name, date, count, content='', note=''):
         note: 备注
     """
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     ws = wb['明细']
     # 计算下一个序号
     next_seq = 1
@@ -361,7 +369,7 @@ def add_lesson(dir_path, name, date, count, content='', note=''):
 def delete_lesson(dir_path, row_num):
     """删除明细表中指定行的上课记录（自动更新汇总）。"""
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     ws = wb['明细']
     if row_num < 2 or row_num > ws.max_row:
         return False
@@ -388,7 +396,7 @@ def update_lesson(dir_path, row_num, date=None, count=None, content=None, note=N
     返回: True 修改成功，False 行号无效
     """
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     ws = wb['明细']
     if row_num < 2 or row_num > ws.max_row:
         return False
@@ -416,7 +424,7 @@ def update_lesson(dir_path, row_num, date=None, count=None, content=None, note=N
 def get_lesson_by_row(dir_path, row_num):
     """按明细表行号获取单条上课记录。返回 dict 或 None。"""
     fpath = _ensure_file(dir_path)
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     ws = wb['明细']
     if row_num < 2 or row_num > ws.max_row:
         return None
@@ -440,7 +448,7 @@ def sync_students(dir_path):
     students = _get_students_from_dir(dir_path)
     if not students:
         return 0
-    wb = load_workbook(fpath)
+    wb = _load_wb(fpath)
     existing = _read_summary_map(wb)
     added = 0
     ws = wb['汇总']
