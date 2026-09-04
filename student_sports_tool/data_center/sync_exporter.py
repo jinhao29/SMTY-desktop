@@ -24,6 +24,20 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from file_lock import file_lock
 
+
+def _import_profile_manager():
+    """导入 profile_manager（兼容主程序扁平导入与独立进程两种运行环境）。"""
+    try:
+        import profile_manager  # noqa: F401
+        return profile_manager
+    except ImportError:
+        pass
+    sub = os.path.join(_PARENT, 'student_profile')
+    if sub not in sys.path:
+        sys.path.insert(0, sub)
+    import profile_manager
+    return profile_manager
+
 # 与 ExcelSync.buildColumnMapping 一一对应的列（顺序即输出顺序）
 SYNC_HEADERS = ['姓名', '性别', '年龄', '年级', '学校', '电话', '身高(cm)', '体重(kg)', '备注']
 
@@ -44,7 +58,7 @@ def build_phone_sync_excel(dir_path: str, output_path: str) -> int:
     返回:
         写入的学员行数；档案目录无效时返回 0
     """
-    import profile_manager as pm
+    pm = _import_profile_manager()
     if not dir_path or not os.path.isdir(dir_path):
         return 0
     students = pm.list_students(dir_path)

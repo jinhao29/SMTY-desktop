@@ -1,9 +1,0 @@
-8877f67e7d66b270448f85db772dda000217f0cb f0ba5a0cff05dd209ce089df9cedcbdf009efcb8 jinhao29 <jinhao29@users.noreply.github.com> 1788020101 +0800	commit: refactor: 桌面端备份模块拆分 + UI 重构（student_sports_tool）
-f0ba5a0cff05dd209ce089df9cedcbdf009efcb8 1d6475edbabf71f031a116272651b9de0c5d6d61 jinhao29 <jinhao29@users.noreply.github.com> 1788020114 +0800	commit: chore: 依赖清单清理（删除失真的 requirements.lock）
-1d6475edbabf71f031a116272651b9de0c5d6d61 75f69802876d1094e853c1855f6b187769ac2d3f jinhao29 <jinhao29@users.noreply.github.com> 1788020116 +0800	commit: docs: 更新 4-6 岁教案模板内容
-75f69802876d1094e853c1855f6b187769ac2d3f c02724b3a934f959ae969e07011faf1179f319c9 jinhao29 <jinhao29@users.noreply.github.com> 1788020149 +0800	commit: refactor: 补齐 UI 重构拆分出的新文件（student_sports_tool）
-c02724b3a934f959ae969e07011faf1179f319c9 23bef80a932fec3a79c53aaea42f673a392c5a71 jinhao29 <jinhao29@users.noreply.github.com> 1788020252 +0800	commit: chore: 仓库卫生（.gitignore 规则统一 + .bak 出库）
-23bef80a932fec3a79c53aaea42f673a392c5a71 dc90a0df437c7cddb63b015ef479f0981dc98320 jinhao29 <jinhao29@users.noreply.github.com> 1788020752 +0800	commit: security: 桌面端更新器 Zip Slip 与校验 fail-open 修复
-dc90a0df437c7cddb63b015ef479f0981dc98320 d68f834c72e3ebf0fec27dad7ab5e69fa9951a5f jinhao29 <jinhao29@users.noreply.github.com> 1788278035 +0800	commit: fix: 时光机快照按档案目录作用域隔离（孤儿索引根修复）
-d68f834c72e3ebf0fec27dad7ab5e69fa9951a5f 922ea7f0009e9eaaf719a9df7a0dd4321736afd0 jinhao29 <jinhao29@users.noreply.github.com> 1788278116 +0800	commit: docs: 勘正「无数据库」与「无法对接 Android」失真表述
-922ea7f0009e9eaaf719a9df7a0dd4321736afd0 4ae0ec287e7fa0cecdd78f7d8cb1716fa5774928 jinhao29 <jinhao29@users.noreply.github.com> 1788506287 +0800	commit: security: Excel 写入改原子替换，杜绝写中断损坏档案（P0）
