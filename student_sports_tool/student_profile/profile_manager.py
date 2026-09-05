@@ -110,6 +110,7 @@ def list_students(archive_dir: str, include_inactive: bool = False) -> list:
             'attended': s.get('attended', 0),
             'remaining': remaining,
             'last_date': s.get('last_date', ''),
+            'updated_at': p.get('updated_at'),
             'warn_level': warn,
             'is_active': p.get('is_active', True),
         })
@@ -120,7 +121,8 @@ def save_student(archive_dir: str, name: str, age: int, height,
                  weight, grade: str, note: str = '',
                  gender: str = '男', school: str = '', phone: str = '',
                  father_height=None, mother_height=None,
-                 sleep_hours=0, nutrition_score=0, sports_mins=0) -> dict:
+                 sleep_hours=0, nutrition_score=0, sports_mins=0,
+                 updated_at_ms=None) -> dict:
     """新增/更新学员档案，自动计算 BMI 与体型。返回写入的档案字典。
 
     参数:
@@ -160,6 +162,8 @@ def save_student(archive_dir: str, name: str, age: int, height,
         'sleep_hours': float(sleep_hours) if sleep_hours else 0,
         'nutrition_score': int(nutrition_score or 0),
         'sports_mins': int(sports_mins or 0),
+        # LWW 保留手机端时间戳（None → 存储层取当前时间）
+        'updated_at_ms': updated_at_ms,
     }
     _upsert_profile(archive_dir, profile)
     # 若学员曾被停用，重新保存即视为恢复启用
@@ -229,3 +233,95 @@ def get_warning_stats(archive_dir: str) -> dict:
 def get_grades() -> list:
     """返回年级选项列表。"""
     return GRADE_OPTIONS
+
+
+# ==================== 手机推送 LWW 合并（v23.2 双端同步） ====================
+
+# Android 端年级编码（Standards.GRADE_OPTIONS）→ PC 端完整年级名
+_ANDROID_GRADE_LABELS = {
+    '0': '学龄前', '1': '小学一年级', '2': '小学二年级', '3': '小学三年级',
+    '4': '小学四年级', '5': '小学五年级', '6': '小学六年级',
+    '7': '初中一年级', '8': '初中二年级', '9': '初中三年级',
+    '10': '高中一年级', '11': '高中二年级', '12': '高中三年级',
+    '13': '中考',
+}
+
+
+def _to_ms(v):
+    """宽松毫秒时间戳转换；无效返回 0。"""
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def merge_student_from_phone(archive_dir: str, s: dict) -> str:
+    """手机→PC 推送方向的档案 LWW 合并。
+
+    规则（与 双端同步协议.md §4 一致）：
+    - 花名册无此学员：用手机端数据建档（需至少有一项有效资料），年级编码转 PC 标签
+    - 花名册已有：仅当手机端 updated_at（毫秒）比 PC 记录更新时，刷新
+      身高/体重/BMI/体型/年龄/性别/学校/电话/遗传与生活字段；
+      年级与备注保留 PC 现值（两端表示不同，不做覆盖）
+    - 手机端无时间戳或时间戳较旧：跳过
+
+    返回: 'updated' / 'created' / 'skipped'
+    """
+    name = (s.get('name') or '').strip()
+    if not name:
+        return 'skipped'
+    phone_ts = _to_ms(s.get('updated_at'))
+    students = {p['name']: p for p in _read_profiles(archive_dir)}
+    existing = students.get(name)
+
+    if existing is not None:
+        pc_ts = _to_ms(existing.get('updated_at'))
+        if phone_ts <= 0 or phone_ts <= pc_ts:
+            return 'skipped'
+
+    def _pick(key, valid=None, default=None):
+        """手机值优先（需通过 valid 校验），否则保留 PC 现值。"""
+        v = s.get(key)
+        if v not in (None, '', 0) and (valid is None or valid(v)):
+            return v
+        if existing is not None:
+            e = existing.get(key)
+            if e not in (None, '', 0):
+                return e
+        return default
+
+    height = _pick('height', valid=lambda v: float(v) > 0)
+    weight = _pick('weight', valid=lambda v: float(v) > 0)
+
+    # 建档场景：手机端无任何有效资料时不产生空档案
+    if existing is None and all(
+        s.get(k) in (None, '', 0) for k in
+        ('height', 'weight', 'age', 'grade', 'school', 'phone')
+    ):
+        return 'skipped'
+
+    grade = s.get('grade')
+    if existing is not None:
+        grade = existing.get('grade', '')  # 年级两端表示不同，保留 PC 现值
+    elif grade in _ANDROID_GRADE_LABELS:
+        grade = _ANDROID_GRADE_LABELS[grade]
+
+    save_student(
+        archive_dir,
+        name=name,
+        age=int(_pick('age', valid=lambda v: int(v) > 0, default=0) or 0),
+        height=height,
+        weight=weight,
+        grade=grade or ('学龄前' if int(_pick('age', default=0) or 0) < 7 else ''),
+        note=(existing or {}).get('note', '') if existing else (s.get('note') or ''),
+        gender=_pick('gender', default='男') or '男',
+        school=_pick('school', default=''),
+        phone=_pick('phone', default=''),
+        father_height=_pick('father_height', valid=lambda v: float(v) > 0),
+        mother_height=_pick('mother_height', valid=lambda v: float(v) > 0),
+        sleep_hours=_pick('sleep_hours', valid=lambda v: float(v) > 0, default=0) or 0,
+        nutrition_score=_pick('nutrition_score', valid=lambda v: int(v) > 0, default=0) or 0,
+        sports_mins=_pick('sports_mins', valid=lambda v: int(v) > 0, default=0) or 0,
+        updated_at_ms=phone_ts or None,
+    )
+    return 'created' if existing is None else 'updated'

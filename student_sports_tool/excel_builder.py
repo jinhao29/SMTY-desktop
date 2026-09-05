@@ -406,7 +406,7 @@ def append_record(student, dir_path):
             info.setdefault('age', student.get('age'))
             # 遗传与生活习惯字段（对齐 Android Student v17，身高预测用；填了才覆盖）
             for _k in ('father_height', 'mother_height', 'sleep_hours',
-                       'nutrition_score', 'sports_mins'):
+                       'nutrition_score', 'sports_mins', 'updated_at'):
                 if student.get(_k) is not None:
                     info[_k] = student[_k]
 
@@ -438,6 +438,11 @@ def read_student_meta(file_path):
     def _do_read():
         with file_lock(file_path, mode='r', timeout=5.0):
             wb = load_workbook(file_path, read_only=True)
-            return _read_meta(wb)
+            try:
+                return _read_meta(wb)
+            finally:
+                # read_only 模式的工作簿持有文件句柄，必须显式 close，
+                # 否则句柄泄漏到 GC，Windows 下会阻塞后续原子写（os.replace）
+                wb.close()
 
     return with_retry(_do_read, max_retries=3, retry_interval=1.0)

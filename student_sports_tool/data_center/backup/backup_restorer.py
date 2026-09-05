@@ -270,6 +270,11 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
             continue
         pkg_by_name[name] = pkg
 
+    # === 幂等合并（v23.6 修复）：手机备份是全量快照，自动同步会反复推送同一批
+    # 课时；add_lesson 无去重，二次推送曾导致 PC 明细/已上课时翻倍放大。
+    # 以（学员, 日期, 节数, 内容, 备注）全字段为幂等键，跳过 PC 已有记录。
+    existing_lesson_keys = _existing_lesson_keys(target_dir)
+
     new_count = 0
     for stu in students:
         name = stu.get('name', '').strip()
@@ -319,6 +324,8 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 'sleep_hours': stu.get('sleep_hours'),
                 'nutrition_score': stu.get('nutrition_score'),
                 'sports_mins': stu.get('sports_mins'),
+                # 毫秒级更新时间（LWW 判新，往返保真）
+                'updated_at': stu.get('updated_at'),
                 'date': datetime.now().strftime('%Y-%m-%d'),
                 'table_type': 'primary',
                 'grade': None,
@@ -341,18 +348,31 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
             # 合并策略：保留本地档案，仅合并课时记录
             progress_cb(f'已存在档案，执行合并：{name}')
 
-        # 同步该学员的课时明细（使用 effective_name）
+        # === v23.2 推送方向 LWW：手机端学员资料较新 → 刷新 PC 花名册 ===
+        # 覆盖默认策略与显式 merge；新建档路径不走此分支（手机时间戳已随 info 落盘）
+        if os.path.exists(file_path) and action != 'overwrite':
+            merge_result = _lww_merge_roster(target_dir, effective_name, stu)
+            if progress_cb and merge_result == 'updated':
+                progress_cb(f'学员资料已按手机端更新（LWW）：{effective_name}')
+
+        # 同步该学员的课时明细（使用 effective_name；幂等键去重防重复放大）
         # 重命名策略下，远端 lessons 是按原 name 聚合的
         source_lessons = lessons_by_name.get(name, [])
         for les in source_lessons:
             try:
+                les_date = les.get('date') or datetime.now().strftime('%Y-%m-%d')
+                les_count = int(les.get('count') or 1)
+                les_content = les.get('content') or ''
+                les_note = les.get('note') or ''
+                key = (effective_name, str(les_date), les_count,
+                       str(les_content), str(les_note))
+                if key in existing_lesson_keys:
+                    continue
                 lesson_manager.add_lesson(
                     target_dir, effective_name,
-                    les.get('date') or datetime.now().strftime('%Y-%m-%d'),
-                    int(les.get('count') or 1),
-                    les.get('content') or '',
-                    les.get('note') or '',
+                    les_date, les_count, les_content, les_note,
                 )
+                existing_lesson_keys.add(key)
             except (FileNotFoundError, PermissionError) as e:
                 logging.error(f'同步课时失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)
                 continue
@@ -368,6 +388,59 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 logging.error(f'同步课时包失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)
 
     return new_count
+
+
+def _existing_lesson_keys(target_dir: str) -> set:
+    """收集 PC 端已有课时明细的幂等键（学员, 日期, 节数, 内容, 备注）。
+
+    日期统一归一化为 date 的 ISO 字符串（PC 明细单元格可能是 datetime 或 str）。
+    读取失败静默返回空集合——退化为旧行为（重复追加），不阻塞恢复主流程。
+    """
+    keys = set()
+    try:
+        import lesson_manager as _lm
+        for rec in _lm.get_detail(target_dir):
+            d = _lm._norm_date(rec.get('date'))
+            keys.add((
+                rec.get('name'),
+                d.isoformat() if d else str(rec.get('date') or ''),
+                _to_int(rec.get('count')),
+                str(rec.get('content') or ''),
+                str(rec.get('note') or ''),
+            ))
+    except Exception:
+        logging.exception('收集已有课时幂等键失败（退化为不去重）')
+    return keys
+
+
+def _to_int(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _lww_merge_roster(target_dir: str, name: str, stu: dict) -> str:
+    """手机推送方向的花名册 LWW 合并（v23.2）。
+
+    失败静默降级（返回 'skipped'），不阻塞课时/课时包合并主流程。
+    """
+    import sys
+    try:
+        try:
+            import profile_manager as pm
+        except ImportError:
+            # 独立进程（sync_server）场景：补齐 student_profile 导入路径
+            root = os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))))
+            for p in (root, os.path.join(root, 'student_profile')):
+                if p not in sys.path:
+                    sys.path.insert(0, p)
+            import profile_manager as pm
+        return pm.merge_student_from_phone(target_dir, stu)
+    except Exception:
+        logging.exception(f'花名册 LWW 合并失败 [{name}]')
+        return 'skipped'
 
 
 def _safe_filename(name: str) -> str:

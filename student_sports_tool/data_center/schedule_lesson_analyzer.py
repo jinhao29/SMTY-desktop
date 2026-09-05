@@ -196,6 +196,70 @@ def _read_schedules_from_zip(zip_path: str, progress_cb=None) -> List[Dict[str, 
             pass
 
 
+# ==================== v23.5 最新手机备份自动检测 ====================
+
+# 排除的文件名前缀：PC 端目录自备份（不含手机 db，无需解析）
+_PC_BACKUP_PREFIXES = ('恢复前自动备份', 'smty_sync_', '~$')
+
+
+def is_phone_backup(zip_path: str) -> bool:
+    """判断 zip 是否为手机端备份（含 .db 或 export_meta.json），快速探测。"""
+    if not zip_path or not os.path.exists(zip_path):
+        return False
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            names = zf.namelist()
+        return (any(n.lower().endswith('.db') for n in names)
+                or 'export_meta.json' in names)
+    except Exception:
+        return False
+
+
+def find_latest_phone_backup(archive_dir: str) -> str:
+    """自动查找最新的手机端备份 zip（达成率分析默认数据源）。
+
+    扫描顺序（取全局 mtime 最新者）：
+    1. <archive>/.sync_backups/        —— 双端同步服务自动接收目录
+    2. config 的 phone_backup_sync_dir —— auto_sync 监控目录
+    3. <archive> 根目录                —— 手动放入的备份
+
+    排除 PC 端目录自备份与临时文件。无匹配返回 ''。
+    """
+    if not archive_dir or not os.path.isdir(archive_dir):
+        return ''
+    dirs = [os.path.join(archive_dir, '.sync_backups')]
+    try:
+        from data_center.config_manager import load_config
+        extra = (load_config(archive_dir).get('phone_backup_sync_dir') or '').strip()
+        if extra and os.path.isdir(extra):
+            dirs.append(extra)
+    except Exception:
+        pass
+    dirs.append(archive_dir)
+
+    latest, latest_mtime = '', 0.0
+    seen = set()
+    for d in dirs:
+        if not os.path.isdir(d) or d in seen:
+            continue
+        seen.add(d)
+        for name in os.listdir(d):
+            low = name.lower()
+            # 手机备份扩展名：.zip 或 .smty_backup（sync_server 默认命名）
+            if not (low.endswith('.zip') or low.endswith('.smty_backup')):
+                continue
+            if name.startswith('~$') or any(name.startswith(p) for p in _PC_BACKUP_PREFIXES):
+                continue
+            path = os.path.join(d, name)
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            if mtime > latest_mtime and is_phone_backup(path):
+                latest, latest_mtime = path, mtime
+    return latest
+
+
 def _read_local_lessons(target_dir: str, year: int, month: int,
                         progress_cb=None) -> List[Dict[str, Any]]:
     """读取本地指定月份的 lesson 明细。

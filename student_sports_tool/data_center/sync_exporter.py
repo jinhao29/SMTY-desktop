@@ -39,7 +39,9 @@ def _import_profile_manager():
     return profile_manager
 
 # 与 ExcelSync.buildColumnMapping 一一对应的列（顺序即输出顺序）
-SYNC_HEADERS = ['姓名', '性别', '年龄', '年级', '学校', '电话', '身高(cm)', '体重(kg)', '备注']
+# 「数据更新时间」= PC 端毫秒时间戳，手机端据此做 LWW（新者胜），勿改列名关键字
+SYNC_HEADERS = ['姓名', '性别', '年龄', '年级', '学校', '电话',
+                '身高(cm)', '体重(kg)', '数据更新时间', '备注']
 
 THIN = Side(style='thin', color='888888')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -48,21 +50,42 @@ HEADER_FILL = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='s
 HEADER_FONT = Font(bold=True, color='FFFFFF', name='微软雅黑')
 
 
+def _import_data_exporter():
+    """导入 data_exporter（collect_all_students，扫描每学员 xlsx 的 _meta）。"""
+    try:
+        import data_exporter  # noqa: F401
+        return data_exporter
+    except ImportError:
+        pass
+    if _HERE not in sys.path:
+        sys.path.insert(0, _HERE)
+    import data_exporter
+    return data_exporter
+
+
 def build_phone_sync_excel(dir_path: str, output_path: str) -> int:
     """生成 PC→手机 学员同步 Excel。
 
-    参数:
-        dir_path: 档案目录（学员档案.xlsx 所在目录）
-        output_path: 输出 xlsx 路径
+    数据源双来源合并：
+    - 花名册（学员档案.xlsx，含 年龄/年级/身高/体重/备注）
+    - 每学员 xlsx 的 _meta.info（Android 恢复/导入刚落地、花名册可能尚未同步）
+    任一来源存在的学员都会进入同步包，字段取「先花名册、后档案 info」。
 
     返回:
         写入的学员行数；档案目录无效时返回 0
     """
     pm = _import_profile_manager()
+    de = _import_data_exporter()
     if not dir_path or not os.path.isdir(dir_path):
         return 0
-    students = pm.list_students(dir_path)
-    if not students:
+    roster = {s['name']: s for s in pm.list_students(dir_path)}
+    scanned = {}
+    try:
+        scanned = {s['name']: s for s in de.collect_all_students(dir_path)}
+    except Exception:
+        scanned = {}
+    names = sorted(set(roster) | set(scanned))
+    if not names:
         return 0
 
     wb = Workbook()
@@ -75,30 +98,51 @@ def build_phone_sync_excel(dir_path: str, output_path: str) -> int:
         c.alignment = CENTER
         c.border = BORDER
 
-    for r, s in enumerate(students, start=2):
+    def _pick(r, s, key, default=''):
+        v = r.get(key) or s.get(key)
+        return v if v not in (None, '') else default
+
+    def _to_ms(v):
+        """updated_at → 毫秒整数（兼容旧字符串格式）；无效返回 ''。"""
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return ''
+
+    def _norm_text(v):
+        """文本列规范化：数字单元格（电话被 Excel 存为数值等）统一转字符串，
+        避免 Android 端按文本列解析时类型不一致。"""
+        if v is None:
+            return ''
+        if isinstance(v, float) and v.is_integer():
+            return str(int(v))
+        return str(v)
+
+    for row_idx, name in enumerate(names, start=2):
+        r = roster.get(name, {})
+        s = scanned.get(name, {})
         values = [
-            s.get('name', ''),
-            s.get('gender', '男'),
-            s.get('age') or '',
-            s.get('grade', ''),
-            s.get('school', ''),
-            s.get('phone', ''),
-            s.get('height') or '',
-            s.get('weight') or '',
-            s.get('note', ''),
+            name,
+            _norm_text(_pick(r, s, 'gender', '男')),
+            _norm_text(_pick(r, s, 'age', '')),
+            _norm_text(r.get('grade') or ''),
+            _norm_text(_pick(r, s, 'school', '')),
+            _norm_text(_pick(r, s, 'phone', '')),
+            _pick(r, s, 'height', ''),
+            _pick(r, s, 'weight', ''),
+            _to_ms(r.get('updated_at') or s.get('updated_at')),
+            _norm_text(r.get('note') or ''),
         ]
         for c, v in enumerate(values, 1):
-            cell = ws.cell(row=r, column=c, value=v)
+            cell = ws.cell(row=row_idx, column=c, value=v)
             cell.border = BORDER
-            cell.alignment = CENTER if c != 9 else None
-            if c == 9:
-                cell.alignment = Alignment(horizontal='left', vertical='center')
+            cell.alignment = CENTER if c != 10 else Alignment(horizontal='left', vertical='center')
 
-    widths = [12, 8, 8, 14, 18, 14, 10, 10, 26]
+    widths = [12, 8, 8, 14, 18, 14, 10, 10, 16, 26]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[chr(64 + i)].width = w
     ws.freeze_panes = 'A2'
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     with file_lock(output_path):
         wb.save(output_path)
-    return len(students)
+    return len(names)

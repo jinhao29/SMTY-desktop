@@ -84,6 +84,8 @@ def _normalize_student(row: Dict[str, Any]) -> Dict[str, Any]:
         'sleep_hours': _pick(row, 'avg_sleep_hours', 'avgSleepHours', default=None),
         'nutrition_score': _pick(row, 'nutrition_score', 'nutritionScore', default=None),
         'sports_mins': _pick(row, 'sports_mins_per_week', 'sportsMinsPerWeek', default=None),
+        # 毫秒级更新时间（v23 双端同步 LWW 判新）
+        'updated_at': _pick(row, 'updated_at', 'updatedAt', default=None),
         'created_at': _pick(row, 'created_at', 'create_time', default=None),
     }
 

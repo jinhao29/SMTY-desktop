@@ -227,6 +227,7 @@ def read_all(dir_path: str) -> list:
                     'sleep_hours': _num(_cell('睡眠(h/天)')),
                     'nutrition_score': int(_num(_cell('营养评分(1-5)'))),
                     'sports_mins': int(_num(_cell('周运动(min/周)'))),
+                    'updated_at': stu_meta.get('updated_at'),
                     'row': r,
                     'is_active': is_active,
                 })
@@ -264,7 +265,10 @@ def set_active_status(dir_path: str, name: str, is_active: bool) -> bool:
             meta.setdefault('students', {})
             stu_meta = meta['students'].setdefault(name, {})
             stu_meta['is_active'] = bool(is_active)
-            stu_meta['updated_at'] = _now_str()
+            # 停用视为数据变更刷新 LWW 时间戳；启用不刷新（save_student 的
+            # upsert 刚写入来源端时间戳，此处覆盖会丢失 LWW 判新依据）
+            if not is_active:
+                stu_meta['updated_at'] = _now_ms()
             _write_meta(wb, meta)
             atomic_save_workbook(wb, fpath)
             return True
@@ -276,6 +280,12 @@ def _now_str() -> str:
     """返回当前时间的字符串表示（用于状态变更时间戳）。"""
     from datetime import datetime
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _now_ms() -> int:
+    """当前时间毫秒时间戳（v23 双端同步 LWW 用，写入 _meta.students[name].updated_at）。"""
+    import time
+    return int(time.time() * 1000)
 
 
 def upsert(dir_path: str, profile: dict) -> bool:
@@ -335,14 +345,16 @@ def upsert(dir_path: str, profile: dict) -> bool:
                 cell = ws.cell(row=target_row, column=col, value=v)
                 cell.border = BORDER
                 cell.alignment = LEFT if header in ('备注', '学校') else CENTER
-            # 新建学员时同步在 _meta 中标记为启用
+            # 每次 upsert 刷新 _meta：启用状态 + 毫秒级时间戳（v23 双端同步 LWW 判新依据）
+            meta = _read_meta(wb)
+            meta.setdefault('students', {})
+            stu = meta['students'].setdefault(profile['name'], {})
             if is_reactivate:
-                meta = _read_meta(wb)
-                meta.setdefault('students', {})
-                meta['students'].setdefault(profile['name'], {})
-                meta['students'][profile['name']]['is_active'] = True
-                meta['students'][profile['name']]['updated_at'] = _now_str()
-                _write_meta(wb, meta)
+                stu['is_active'] = True
+            # LWW 保留来源端时间戳（如手机推送合并时透传），否则取当前时间
+            stu['updated_at'] = int(profile['updated_at_ms']) \
+                if profile.get('updated_at_ms') else _now_ms()
+            _write_meta(wb, meta)
             atomic_save_workbook(wb, fpath)
             return True
 

@@ -15,6 +15,7 @@
 - 失败静默降级（无 schedules 表时提示"无排课数据"）
 """
 import modern_dialog as dialog
+import logging
 import os
 from datetime import datetime
 from PySide6.QtCore import Qt
@@ -94,13 +95,18 @@ class ScheduleAchievementPanel(QWidget):
 
         cl.addWidget(QLabel('Android 备份 zip：'))
         self.le_zip = QLineEdit()
-        self.le_zip.setPlaceholderText('选择手机端推送的备份 zip（含 schedules 表）')
+        self.le_zip.setPlaceholderText('自动使用双端同步的最新手机备份，也可手动选择')
         self.le_zip.setStyleSheet('color:#1A1A1A;')
         cl.addWidget(self.le_zip, 1)
 
         self.btn_pick_zip = QPushButton('选择', objectName='secondary')
         self.btn_pick_zip.clicked.connect(self._on_pick_zip)
         cl.addWidget(self.btn_pick_zip)
+
+        self.btn_autodetect = QPushButton('找最新', objectName='secondary')
+        self.btn_autodetect.setToolTip('自动查找双端同步接收的最新手机备份')
+        self.btn_autodetect.clicked.connect(self._autodetect_backup)
+        cl.addWidget(self.btn_autodetect)
 
         cl.addWidget(QLabel('月份：'))
         self.cb_month = QComboBox()
@@ -171,6 +177,36 @@ class ScheduleAchievementPanel(QWidget):
         self.tbl_absent.setMinimumHeight(140)
         al.addWidget(self.tbl_absent)
         lay.addWidget(gb_absent)
+
+        # === v23.5：面板打开即自动填充双端同步的最新手机备份 ===
+        self._autodetect_backup(quiet=True)
+
+    def _autodetect_backup(self, quiet: bool = False):
+        """自动查找最新的手机端备份（同步接收目录优先），填入输入框。
+
+        quiet=True 时不弹提示（面板初始化静默调用）。
+        """
+        try:
+            try:
+                from schedule_lesson_analyzer import find_latest_phone_backup
+            except ImportError:
+                # 测试/包导入环境：data_center 不在 sys.path 时走包导入
+                from data_center.schedule_lesson_analyzer import find_latest_phone_backup
+            path = find_latest_phone_backup(self._dir_getter() or '')
+        except Exception:
+            logging.exception('自动查找手机备份失败')
+            path = ''
+        if path:
+            self.le_zip.setText(path)
+            if not quiet:
+                self._on_analyze()
+        elif not quiet:
+            try:
+                import modern_dialog as dialog
+                dialog.info(self, '提示',
+                            '未找到手机端备份：请先完成一次双端同步（或手动选择备份文件）')
+            except Exception:
+                pass
 
     def _make_metric_card(self, parent_layout, title, value, color):
         """创建一个概览指标卡片（垂直布局：标题 + 大数值）。"""

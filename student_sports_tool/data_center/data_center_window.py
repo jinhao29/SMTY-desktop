@@ -29,6 +29,7 @@ from backup_panel import BackupPanel
 from report_panel import ReportPanel
 from renewal_panel import RenewalPanel
 from schedule_achievement_panel import ScheduleAchievementPanel
+from sync_panel import SyncServerPanel
 from base_components import ColorPalette, StatCell
 
 DEFAULT_DIR = os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案')
@@ -218,7 +219,7 @@ class DataCenterWindow(QWidget):
         # 子 Tab
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; background: #F5F7FA; }
+            QTabWidget::pane { border: none; background: #FFFFFF; }
             QTabBar::tab {
                 background: #FFFFFF;
                 color: #6B6B6B;
@@ -258,6 +259,10 @@ class DataCenterWindow(QWidget):
         # 教练可截图发家长，展示专业教学管理能力
         self.panel_achievement = ScheduleAchievementPanel(self._get_dir)
         self.tabs.addTab(self.panel_achievement, '  训练达成率分析  ')
+
+        # === 双端同步服务面板（手机推送自动合并 + 学员数据拉取）===
+        self.panel_sync = SyncServerPanel(self._get_dir)
+        self.tabs.addTab(self.panel_sync, '  双端同步  ')
 
         lay.addWidget(self.tabs, 1)
 
@@ -397,6 +402,15 @@ class DataCenterWindow(QWidget):
             self.lbl_auto_backup_status.setText(
                 f'精彩瞬间接收未启用：{e}'
             )
+
+    def closeEvent(self, event):
+        """窗口关闭时停止内嵌同步服务线程。"""
+        try:
+            if hasattr(self, 'panel_sync') and self.panel_sync is not None:
+                self.panel_sync.shutdown()
+        except Exception:
+            logging.exception('停止同步服务失败')
+        super().closeEvent(event)
 
     def _on_moment_received(self, student_name: str, save_path: str, file_size: int) -> None:
         """收到 Android 端推送的精彩瞬间照片时的回调（Qt 主线程）。

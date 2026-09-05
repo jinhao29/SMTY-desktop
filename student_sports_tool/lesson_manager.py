@@ -12,7 +12,7 @@
 - 汇总表列：学员 | 总课时 | 已上课时 | 剩余课时 | 最近上课 | 备注
 """
 import os
-from datetime import datetime
+from datetime import datetime, date as _date
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from file_lock import file_lock, atomic_save_workbook
@@ -64,6 +64,9 @@ TOTAL_FILL = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='so
 DETAIL_HEADERS = ['序号', '日期', '学员', '课时数', '训练内容', '备注']
 SUMMARY_HEADERS = ['学员', '总课时', '已上课时', '剩余课时', '最近上课', '备注']
 
+# 非学员数据文件：文件名会被 sync_students 误认为学员名，需排除并清理历史遗留
+_NON_STUDENT_FILES = {'学员档案.xlsx', '教练档案.xlsx'}
+
 
 def _lesson_file_path(dir_path):
     """返回课时记录文件的完整路径。"""
@@ -71,12 +74,17 @@ def _lesson_file_path(dir_path):
 
 
 def _get_students_from_dir(dir_path):
-    """从档案目录扫描学员名单（.xlsx 文件名，排除课时记录自身与临时文件）。"""
+    """从档案目录扫描学员名单（.xlsx 文件名，排除课时记录自身与临时文件）。
+
+    同时排除主数据文件（学员档案/教练档案）——它们是数据存储文件，
+    文件名不是学员名（历史 bug：曾把「学员档案」当成幽灵学员写入汇总表）。
+    """
     students = []
     if not os.path.isdir(dir_path):
         return students
     for f in sorted(os.listdir(dir_path)):
-        if f.lower().endswith('.xlsx') and not f.startswith('~$') and f != LESSON_FILE:
+        if (f.lower().endswith('.xlsx') and not f.startswith('~$')
+                and f != LESSON_FILE and f not in _NON_STUDENT_FILES):
             students.append(f[:-5])
     return students
 
@@ -163,9 +171,34 @@ def _calc_attended(records, name):
     return sum(rec['count'] for rec in records if rec['name'] == name)
 
 
+def _norm_date(v):
+    """日期归一化：datetime→date，字符串尝试 ISO 解析，失败返回 None。
+
+    明细表日期可能混存 datetime（Excel 单元格）与字符串（同步/手输），
+    归一化后才能安全比较与取 max。
+    """
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, _date):
+        return v
+    if isinstance(v, str):
+        s = v.strip()[:10].replace('/', '-')
+        try:
+            return _date.fromisoformat(s)
+        except ValueError:
+            return None
+    return None
+
+
 def _calc_last_date(records, name):
-    """从明细记录获取指定学员最近上课日期。"""
-    dates = [rec['date'] for rec in records if rec['name'] == name and rec['date']]
+    """从明细记录获取指定学员最近上课日期（兼容 date/datetime/字符串混存）。"""
+    dates = []
+    for rec in records:
+        if rec['name'] != name or not rec['date']:
+            continue
+        d = _norm_date(rec['date'])
+        if d is not None:
+            dates.append(d)
     if not dates:
         return ''
     return max(dates)
@@ -443,15 +476,25 @@ def get_lesson_by_row(dir_path, row_num):
 
 
 def sync_students(dir_path):
-    """将档案目录中的学员同步到汇总表（新增学员补空行，保留已有数据）。"""
+    """将档案目录中的学员同步到汇总表（新增学员补空行，保留已有数据）。
+
+    同时清理历史遗留：早年版本曾把「学员档案」等主数据文件名误写为学员，
+    此处在同步时一并从汇总表移除。
+    """
     fpath = _ensure_file(dir_path)
     students = _get_students_from_dir(dir_path)
-    if not students:
-        return 0
     wb = _load_wb(fpath)
     existing = _read_summary_map(wb)
     added = 0
+    removed = 0
     ws = wb['汇总']
+    # 清理历史遗留的幽灵学员（主数据文件名）
+    for r in range(2, ws.max_row + 1):
+        name_v = str(ws.cell(row=r, column=1).value or '').strip()
+        if name_v and f'{name_v}.xlsx' in _NON_STUDENT_FILES:
+            for c in range(1, 7):
+                ws.cell(row=r, column=c).value = None
+            removed += 1
     for s in students:
         if s not in existing:
             new_row = ws.max_row + 1 if ws.cell(row=ws.max_row, column=1).value else ws.max_row
@@ -464,7 +507,7 @@ def sync_students(dir_path):
             ws.cell(row=new_row, column=5, value='')
             ws.cell(row=new_row, column=6, value='')
             added += 1
-    if added:
+    if added or removed:
         records = _read_detail(wb)
         _rebuild_summary(wb, records)
         _save_wb(fpath, wb)

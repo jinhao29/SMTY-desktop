@@ -56,6 +56,10 @@ def _calc_status(remaining, total):
     return '正常'
 
 
+# 主数据文件（非学员档案）：扫描目录时排除，防止「学员档案/教练档案」被当成学员
+_NON_STUDENT_FILES = {'课时记录.xlsx', '学员档案.xlsx', '教练档案.xlsx'}
+
+
 def collect_all_students(dir_path):
     """收集档案目录下所有学员的汇总数据。
 
@@ -65,7 +69,8 @@ def collect_all_students(dir_path):
     files = []
     if os.path.isdir(dir_path):
         for f in sorted(os.listdir(dir_path)):
-            if f.lower().endswith('.xlsx') and not f.startswith('~$') and f != '课时记录.xlsx':
+            if (f.lower().endswith('.xlsx') and not f.startswith('~$')
+                    and f not in _NON_STUDENT_FILES):
                 files.append(f)
 
     # 课时汇总
@@ -94,6 +99,7 @@ def collect_all_students(dir_path):
             'gender': info.get('gender', ''),
             'school': info.get('school', ''),
             'phone': info.get('phone', ''),
+            'updated_at': info.get('updated_at'),
             'total': total,
             'attended': attended,
             'remaining': remaining,
