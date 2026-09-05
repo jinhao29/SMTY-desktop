@@ -44,3 +44,17 @@ _verify_*.py
 # 个人/时效性业务文件不入库（2026-09-04 随恢复快照误入，移出跟踪）
 秦宝腾.xlsx
 每日财经要闻-*.html
+
+# 仓库根运行时恢复备份（backup_restorer 自动生成，不入库）
+backups/
+
+# 一次性事故恢复脚本与 UI 预览调试脚本（用完即弃）
+student_sports_tool/_recover_*.py
+student_sports_tool/_render_*.py
+_ui_fix_preview/
+student_sports_tool/_ui_fix_preview/
+
+# 同步/技术审查报告（本地生成的时效性产物）
+sync_audit_*.html
+tech_review_*.html
+top_whitespace_audit_report.html
