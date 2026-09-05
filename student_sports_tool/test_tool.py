@@ -88,3 +88,65 @@ def test_excel_generation(tmp_path):
     assert os.path.exists(file2)
     wb = load_workbook(file1)
     assert len(wb.sheetnames) >= 1
+
+
+def test_sync_students_skips_data_files(tmp_path):
+    """课时汇总同步不再把主数据文件名（学员档案.xlsx）误认为学员。
+
+    历史 bug：sync_students 扫描目录下所有 .xlsx 文件名当学员名单，
+    「学员档案.xlsx」被当成幽灵学员「学员档案」写入汇总表，
+    在学员列表（含停用过滤关闭时）与统计中出现脏行。
+    """
+    import lesson_manager as lm
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'student_profile'))
+    import profile_manager as pm
+    from openpyxl import load_workbook
+
+    d = str(tmp_path)
+    pm.save_student(d, '张三', 10, 140, 35, '小学四年级')
+    lm.set_total_lessons(d, '张三', 30)  # 让张三进入课时汇总表
+    # 模拟历史遗留：汇总表里已有幽灵学员「学员档案」
+    fpath = lm._lesson_file_path(d)
+    wb = load_workbook(fpath)
+    ws = wb['汇总']
+    ws.cell(row=ws.max_row + 1, column=1, value='学员档案')
+    lm._save_wb(fpath, wb)
+    # 再触发同步：应清理幽灵行且不再新增
+    lm.sync_students(d)
+    names = [s['name'] for s in lm.get_summary(d)]
+    assert '学员档案' not in names
+    assert '张三' in names
+    # 学员列表（含停用）也不应出现幽灵学员
+    all_names = [s['name'] for s in pm.list_students(d, include_inactive=True)]
+    assert '学员档案' not in all_names
+
+
+def test_sync_students_skips_data_files(tmp_path):
+    """课时汇总同步不再把主数据文件名（学员档案.xlsx）误认为学员。
+
+    历史 bug：sync_students 扫描目录下所有 .xlsx 文件名当学员名单，
+    「学员档案.xlsx」被当成幽灵学员「学员档案」写入汇总表，
+    在学员列表（含停用过滤关闭时）与统计中出现脏行。
+    """
+    import lesson_manager as lm
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'student_profile'))
+    import profile_manager as pm
+    from openpyxl import load_workbook
+
+    d = str(tmp_path)
+    pm.save_student(d, '张三', 10, 140, 35, '小学四年级')
+    lm.set_total_lessons(d, '张三', 30)  # 让张三进入课时汇总表
+    # 模拟历史遗留：汇总表里已有幽灵学员「学员档案」
+    fpath = lm._lesson_file_path(d)
+    wb = load_workbook(fpath)
+    ws = wb['汇总']
+    ws.cell(row=ws.max_row + 1, column=1, value='学员档案')
+    lm._save_wb(fpath, wb)
+    # 再触发同步：应清理幽灵行且不再新增
+    lm.sync_students(d)
+    names = [s['name'] for s in lm.get_summary(d)]
+    assert '学员档案' not in names
+    assert '张三' in names
+    # 学员列表（含停用）也不应出现幽灵学员
+    all_names = [s['name'] for s in pm.list_students(d, include_inactive=True)]
+    assert '学员档案' not in all_names

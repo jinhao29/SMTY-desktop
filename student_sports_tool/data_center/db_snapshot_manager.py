@@ -35,7 +35,7 @@ from typing import List, Optional, Tuple
 SNAPSHOT_DIR_NAME = '_db_snapshots'
 
 # 默认滚动保留份数
-DEFAULT_MAX_SNAPSHOTS = 20
+DEFAULT_MAX_SNAPSHOTS = 200
 
 # 快照文件名前缀
 SNAPSHOT_PREFIX = 'meta_index.db.old_'
