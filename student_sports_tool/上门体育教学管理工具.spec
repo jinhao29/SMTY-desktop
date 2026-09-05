@@ -133,6 +133,13 @@ hiddenimports = [
     'data_center',
     'data_center.archive_manager',
     'data_center.backup_coordinator',
+    'data_center.sync_server',      # 双端同步服务（内嵌 HTTP 服务）
+    'data_center.sync_panel',       # 数据中心「双端同步」面板
+    'data_center.sync_exporter',    # PC→手机 学员同步包生成
+    'data_center.firewall_helper',  # LAN 防火墙自动放行（Wi-Fi 互通）
+    'data_center.sync_service',     # 全局同步服务管理器（主程序自动启动）
+    'data_center.usb_helper',       # USB adb reverse 自动连接
+    'backup_validator',             # 备份 zip 安全校验（auto_sync/sync_server 共用）
     # backup 子包（P2 超大文件拆分：备份创建/恢复/列表/清理）
     'data_center.backup',
     'data_center.backup.backup_creator',

@@ -36,6 +36,7 @@ import plan_coordinator
 # 新设计语言组件
 from styles import Palette, Radius, Spacing, Type
 from cards import Card, Tag, TagInput, SectionTitle, TaskListItem, IconButton
+from base_components import FormSheet
 
 
 _WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
@@ -189,8 +190,7 @@ class SingleTab(QWidget):
         list_scroll.setFrameShape(QFrame.NoFrame)
         list_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         list_scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
-        list_content = QWidget()
-        list_content.setStyleSheet('background: transparent;')
+        list_content = QWidget()  # 透明背景由 TRAINING_QSS 全局规则提供（裸声明会压掉按钮背景）
         self._task_list_lay = QVBoxLayout(list_content)
         self._task_list_lay.setContentsMargins(0, 0, 0, 0)
         self._task_list_lay.setSpacing(6)
@@ -218,19 +218,20 @@ class SingleTab(QWidget):
         main_lay.addWidget(left_card)
 
         # ==================== 中列：可滚动主内容 ====================
+        # v23.5 修复：横向滚动条按需出现（此前 AlwaysOff 导致窄窗口下内容被静默裁切）
         mid_scroll = QScrollArea()
         mid_scroll.setWidgetResizable(True)
         mid_scroll.setFrameShape(QFrame.NoFrame)
-        mid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        mid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         mid_scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
-        mid_content = QWidget()
-        mid_content.setStyleSheet('background: transparent;')
+        mid_content = QWidget()  # 透明背景由 TRAINING_QSS 全局规则提供（裸声明会压掉按钮背景）
         mid_lay = QVBoxLayout(mid_content)
         mid_lay.setSpacing(Spacing.CARD)
         mid_lay.setContentsMargins(0, 0, 0, 0)
 
-        # ---------- 当日编排头部卡 ----------
-        header_card = Card()
+        # ---------- 连续版面（v25：单张白纸分节，替代多卡框套框） ----------
+        sheet = FormSheet()
+
         hl = QVBoxLayout()
         hl.setContentsMargins(0, 0, 0, 0)
         hl.setSpacing(Spacing.MD)
@@ -260,13 +261,11 @@ class SingleTab(QWidget):
         tag_row.addWidget(self.le_equipment, 1)
         tag_row.addStretch()
         hl.addLayout(tag_row)
-        header_card.set_content_layout(hl)
-        mid_lay.addWidget(header_card)
+        sheet.add_section(None, hl)
 
-        # ---------- 基本信息卡 ----------
-        info_card = Card('基本信息')
+        # ---------- 基本信息节 ----------
         gl = QGridLayout()
-        gl.setHorizontalSpacing(20)
+        gl.setHorizontalSpacing(14)
         gl.setVerticalSpacing(14)
         gl.setContentsMargins(0, 0, 0, 0)
 
@@ -282,33 +281,33 @@ class SingleTab(QWidget):
         self.le_loc = QLineEdit(placeholderText='如 深圳体育中心')
         self.le_goal = QLineEdit(placeholderText='如 增强上肢力量与核心稳定性')
 
-        row0 = [('姓名', self.cb_name), ('性别', self.cb_gender),
-                ('年龄', self.le_age), ('教练', self.le_coach)]
-        for c, (lab, w) in enumerate(row0):
-            lbl = QLabel(lab)
-            lbl.setStyleSheet(f'color: {Palette.TEXT_SUB}; background: transparent;')
-            gl.addWidget(lbl, 0, c * 2)
-            gl.addWidget(w, 0, c * 2 + 1)
-        row1 = [('训练日期', self.dte_date), ('训练地点', self.le_loc),
-                ('训练目标', self.le_goal)]
-        for c, (lab, w) in enumerate(row1):
-            lbl = QLabel(lab)
-            lbl.setStyleSheet(f'color: {Palette.TEXT_SUB}; background: transparent;')
-            gl.addWidget(lbl, 1, c * 2)
-            gl.addWidget(w, 1, c * 2 + 1)
+        # v25: 2 字段/行（4 字段/行在中列 ~560px 宽度下横向裁切）
+        _rows = [
+            [('姓名', self.cb_name), ('性别', self.cb_gender)],
+            [('年龄', self.le_age), ('教练', self.le_coach)],
+            [('训练日期', self.dte_date), ('训练地点', self.le_loc)],
+        ]
+        for r, pairs in enumerate(_rows):
+            for c, (lab, w) in enumerate(pairs):
+                lbl = QLabel(lab)
+                lbl.setStyleSheet(f'color: {Palette.TEXT_SUB}; background: transparent;')
+                gl.addWidget(lbl, r, c * 2)
+                gl.addWidget(w, r, c * 2 + 1)
+        lbl_goal = QLabel('训练目标')
+        lbl_goal.setStyleSheet(f'color: {Palette.TEXT_SUB}; background: transparent;')
+        gl.addWidget(lbl_goal, 3, 0)
+        gl.addWidget(self.le_goal, 3, 1)
         self.btn_recommend = QPushButton('智能推荐', objectName='recommend')
         self.btn_recommend.setToolTip('根据学员年龄自动匹配对应年龄段教案，推荐训练内容（可在此基础上自定义）')
         self.btn_recommend.setMinimumWidth(120)
         self.btn_recommend.setCursor(Qt.PointingHandCursor)
         self.btn_recommend.clicked.connect(self.on_recommend_single)
-        gl.addWidget(self.btn_recommend, 1, 6, 1, 2)
-        for c in range(4):
-            gl.setColumnStretch(c * 2 + 1, 1)
-        info_card.set_content_layout(gl)
-        mid_lay.addWidget(info_card)
+        gl.addWidget(self.btn_recommend, 3, 2, 1, 2)
+        gl.setColumnStretch(1, 1)
+        gl.setColumnStretch(3, 1)
+        sheet.add_section('基本信息', gl)
 
-        # ---------- 训练内容卡 ----------
-        content_card = Card('训练内容')
+        # ---------- 训练内容节 ----------
         cl = QVBoxLayout()
         cl.setSpacing(Spacing.MD)
         cl.setContentsMargins(0, 0, 0, 0)
@@ -331,18 +330,15 @@ class SingleTab(QWidget):
         action_bar.addWidget(self.btn_pick)
         action_bar.addWidget(self.btn_add_custom)
         action_bar.addStretch()
-        self.btn_del = QPushButton('删除选中行', objectName='danger')
-        self.btn_del.setCursor(Qt.PointingHandCursor)
+        # v25: 顶部「删除选中行」移除——表格操作列每行已有删除按钮，冗余且撑宽按钮行
         self.btn_up = QPushButton('↑ 上移', objectName='secondary')
         self.btn_up.setCursor(Qt.PointingHandCursor)
         self.btn_dn = QPushButton('↓ 下移', objectName='secondary')
         self.btn_dn.setCursor(Qt.PointingHandCursor)
         self.btn_up.clicked.connect(lambda: self._move_task(-1))
         self.btn_dn.clicked.connect(lambda: self._move_task(1))
-        self.btn_del.clicked.connect(self.on_del_task)
         action_bar.addWidget(self.btn_up)
         action_bar.addWidget(self.btn_dn)
-        action_bar.addWidget(self.btn_del)
         cl.addLayout(action_bar)
 
         # 任务表
@@ -357,11 +353,9 @@ class SingleTab(QWidget):
         self.table.setMinimumHeight(280)
         self.table.setAlternatingRowColors(True)
         cl.addWidget(self.table)
-        content_card.set_content_layout(cl)
-        mid_lay.addWidget(content_card, 1)
+        sheet.add_section('训练内容', cl, stretch=1)
 
-        # ---------- 寄语与备注卡 ----------
-        remark_card = Card('寄语与备注')
+        # ---------- 寄语与备注节 ----------
         rl = QVBoxLayout()
         rl.setSpacing(14)
         rl.setContentsMargins(0, 0, 0, 0)
@@ -391,8 +385,8 @@ class SingleTab(QWidget):
         self.le_next = QLineEdit(placeholderText='如 下周二 18:00 速度训练')
         r3.addWidget(self.le_next, 1)
         rl.addLayout(r3)
-        remark_card.set_content_layout(rl)
-        mid_lay.addWidget(remark_card)
+        sheet.add_section('寄语与备注', rl)
+        mid_lay.addWidget(sheet, 1)  # 版面必须挂入布局，否则 _init_ui 返回即被 GC（use-after-free 崩溃）
 
         mid_scroll.setWidget(mid_content)
         main_lay.addWidget(mid_scroll, 1)

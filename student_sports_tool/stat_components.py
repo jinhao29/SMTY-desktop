@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from base_components import (
-    BaseCard, IconBox, FontHelper, ColorPalette, Shapes, Shadows, _fade_color
+    BaseCard, IconBox, FontHelper, ColorPalette, Shapes, Shadows, _fade_color,
+    paint_card_base
 )
 
 
@@ -85,23 +86,13 @@ class GradientHeroCard(BaseCard):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         radius = Shapes.CARD_RADIUS
-        margin = Shadows.BLUR_STEPS // 2 + 2
-        rect = self.rect().adjusted(margin, margin, -margin, -margin - Shadows.OFFSET_Y)
-        # 弥散阴影
-        painter.setPen(Qt.NoPen)
-        for i in range(Shadows.BLUR_STEPS, 0, -1):
-            alpha = int(Shadows.MAX_ALPHA * (1 - i / (Shadows.BLUR_STEPS + 1)))
-            painter.setBrush(QBrush(QColor(0, 0, 0, alpha)))
-            shadow_rect = rect.adjusted(-i, -i + Shadows.OFFSET_Y, i, i + Shadows.OFFSET_Y)
-            painter.drawRoundedRect(shadow_rect, radius, radius)
+        rect = self.rect()  # v25 去阴影：无留白，卡片铺满 widget
         # 渐变背景：珊瑚橙主色 → 深珊瑚橙（M3-S2 与 Android 端对齐）
         grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
         grad.setColorAt(0, QColor('#FF6B47'))
         grad.setColorAt(1, QColor('#E04826'))
-        painter.setBrush(grad)
-        painter.drawRoundedRect(rect, radius, radius)
+        paint_card_base(painter, rect, radius, 0, fill=QBrush(grad))
         # 文字
         painter.setPen(QColor('#FFFFFF'))
         painter.setFont(FontHelper.caption())

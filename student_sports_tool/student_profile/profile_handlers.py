@@ -21,17 +21,10 @@ class ProfileHandlersMixin:
 
     def _on_search(self, text):
         """优化5：搜索过滤由代理模型负责，无需重查存储。"""
-        archive_dir = self._get_dir()
-        if not archive_dir:
-            return
         self._proxy_model.set_keyword(text or '')
-        # 预警栏仍展示全部学员的整体情况（不受搜索过滤影响）
-        try:
-            include_inactive = self.cb_show_inactive.isChecked()
-            all_students = pm.list_students(archive_dir, include_inactive=include_inactive)
-        except Exception:
-            all_students = []
-        self._render_warn_bar(all_students)
+        # 底部栏同步「当前显示数量」（预警名单仍基于全量数据）
+        if hasattr(self, '_all_students'):
+            self._update_header_and_footer(self._all_students)
 
     def _on_table_context_menu(self, pos):
         """右键菜单：恢复已停用学员。"""

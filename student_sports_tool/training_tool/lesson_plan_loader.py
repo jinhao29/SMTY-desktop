@@ -203,19 +203,23 @@ def get_student_age(name: str, archive_dir: str) -> Optional[int]:
         wb = load_workbook(fpath, data_only=True, read_only=True)
     except Exception:
         return None
-    if '学员信息' not in wb.sheetnames:
+    try:
+        if '学员信息' not in wb.sheetnames:
+            return None
+        ws = wb['学员信息']
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row:
+                continue
+            row_name = str(row[0]).strip() if row[0] else ''
+            if row_name == name:
+                try:
+                    return int(row[1]) if row[1] else None
+                except (ValueError, TypeError):
+                    return None
         return None
-    ws = wb['学员信息']
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        if not row:
-            continue
-        row_name = str(row[0]).strip() if row[0] else ''
-        if row_name == name:
-            try:
-                return int(row[1]) if row[1] else None
-            except (ValueError, TypeError):
-                return None
-    return None
+    finally:
+        # read_only 工作簿持有文件句柄，必须显式 close（否则泄漏到 GC）
+        wb.close()
 
 
 def recommend_weekly_plan(age_group: str,

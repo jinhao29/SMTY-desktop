@@ -7,7 +7,7 @@
 - 主色 #FF6B47（活力珊瑚橙）与 Android 端完全一致，实现双端视觉统一
 
 色彩令牌（与 Android 端 UI 规范严格对齐）：
-- 背景：#F5F7FA（暖白） / 侧边栏：#F5F5F5
+- 背景：#FFFFFF（纯白，v25.1 李哥反馈灰底显脏）/ 侧边栏：#FFFFFF + 1px 右描边
 - 卡片：#FFFFFF（纯白） / 边框：#E5E5E5（浅灰）
 - 主色：#FF6B47（活力珊瑚橙，选中态背景，文字反白为 #FFFFFF）
 - 文字：#1A1A1A（主，≥12:1） / #6B6B6B（次，≥4.6:1） / #9B9B9B（弱）
@@ -17,7 +17,7 @@
 LIGHT_QSS = """
 /* ========== 全局基础 ========== */
 QMainWindow, QWidget {
-    background: #F5F7FA;
+    background: #FFFFFF;
     color: #1A1A1A;
     font-family: 'Inter', 'Segoe UI', 'Microsoft YaHei UI', '微软雅黑';
     font-size: 14px;
@@ -95,20 +95,112 @@ QComboBox::drop-down {
 }
 QComboBox::down-arrow {
     image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #6B6B6B;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 7px solid #6B6B6B;
     margin-right: 8px;
 }
+QComboBox:hover::down-arrow { border-top-color: #FF6B47; }
 QComboBox QAbstractItemView {
     background: #FFFFFF;
     border: 1px solid #E5E5E5;
     border-radius: 10px;
     color: #1A1A1A;
-    selection-background-color: rgba(255, 107, 71, 0.12);
-    selection-color: #FF6B47;
-    padding: 4px;
+    padding: 6px;
     outline: none;
+}
+QComboBox QAbstractItemView::item {
+    min-height: 30px;
+    padding: 4px 10px;
+    margin: 1px 2px;
+    border-radius: 6px;
+    color: #1A1A1A;
+}
+QComboBox QAbstractItemView::item:hover {
+    background: rgba(255, 107, 71, 0.08);
+}
+QComboBox QAbstractItemView::item:selected {
+    background: rgba(255, 107, 71, 0.12);
+    color: #FF6B47;
+}
+
+/* ---------- 微调框（QSpinBox/QDateEdit）：隐藏原生上下按钮，纯键盘输入（iOS 风） ---------- */
+QSpinBox::up-button, QDateEdit::up-button, QTimeEdit::up-button, QDateTimeEdit::up-button,
+QSpinBox::down-button, QDateEdit::down-button, QTimeEdit::down-button, QDateTimeEdit::down-button {
+    width: 0;
+    border: none;
+    background: transparent;
+}
+QSpinBox::up-arrow, QDateEdit::up-arrow, QTimeEdit::up-arrow, QDateTimeEdit::up-arrow,
+QSpinBox::down-arrow, QTimeEdit::down-arrow, QDateTimeEdit::down-arrow {
+    image: none;
+    width: 0; height: 0;
+    border: none;
+}
+/* QDateEdit 日历弹出按钮：与 QComboBox 下拉箭头同款 */
+QDateEdit::drop-down {
+    border: none;
+    width: 26px;
+}
+QDateEdit::down-arrow {
+    image: none;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 7px solid #6B6B6B;
+    margin-right: 8px;
+}
+QDateEdit:hover::down-arrow { border-top-color: #FF6B47; }
+
+/* ---------- 日历弹窗（QDateEdit calendarPopup）全面主题化 ---------- */
+QCalendarWidget QWidget {
+    alternate-background-color: #F8F8F8;
+}
+QCalendarWidget QAbstractItemView {
+    background: #FFFFFF;
+    color: #1A1A1A;
+    selection-background-color: #FF6B47;
+    selection-color: #FFFFFF;
+    outline: none;
+    border: none;
+}
+QCalendarWidget QToolButton {
+    background: transparent;
+    color: #1A1A1A;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-weight: 600;
+}
+QCalendarWidget QToolButton:hover {
+    background: rgba(255, 107, 71, 0.10);
+    color: #FF6B47;
+}
+QCalendarWidget QToolButton::menu-indicator { image: none; }
+#qt_calendar_navigationbar {
+    background: #FFFFFF;
+    border-bottom: 1px solid #E5E5E5;
+    padding: 4px;
+}
+#qt_calendar_yearedit, #qt_calendar_monthedit {
+    background: #F5F7FA;
+    border: 1px solid #E5E5E5;
+    border-radius: 8px;
+    padding: 2px 8px;
+    color: #1A1A1A;
+    font-weight: 600;
+}
+#qt_calendar_monthbutton { color: #FF6B47; }
+#qt_calendar_yearbutton { color: #FF6B47; }
+#qt_calendar_prevmonth, #qt_calendar_nextmonth {
+    background: transparent;
+    border-radius: 8px;
+}
+#qt_calendar_prevmonth:hover, #qt_calendar_nextmonth:hover {
+    background: rgba(255, 107, 71, 0.10);
+}
+#qt_calendar_calendarview {
+    background: #FFFFFF;
+    border: none;
+    gridline-color: transparent;
 }
 
 /* ========== 按钮体系 ========== */
@@ -201,7 +293,7 @@ QTableWidget::item:selected, QTableView::item:selected {
     background: rgba(255, 107, 71, 0.12); color: #FF6B47;
 }
 QHeaderView::section {
-    background: #F8F8F8;
+    background: #FFFFFF;
     color: #6B6B6B;
     padding: 11px 10px;
     border: none;
@@ -212,7 +304,7 @@ QHeaderView::section {
 QHeaderView::section:first { border-top-left-radius: 12px; }
 QHeaderView::section:last { border-top-right-radius: 12px; }
 QTableCornerButton::section {
-    background: #F8F8F8;
+    background: #FFFFFF;
     border: none;
     border-top-left-radius: 12px;
 }
@@ -327,7 +419,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }
 
 /* ========== 对话框 / 提示 ========== */
-QDialog { background: #F5F7FA; }
+QDialog { background: #FFFFFF; }
 QScrollArea { border: none; background: transparent; }
 QToolTip {
     background: #FFFFFF;

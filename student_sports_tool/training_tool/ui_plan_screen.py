@@ -26,7 +26,7 @@ import plan_coordinator
 
 # 新设计语言令牌与组件
 from styles import Palette, Type, Spacing, Radius
-from cards import Card, Tag
+from base_components import FormSheet
 
 
 class WeeklyTab(QWidget):
@@ -59,14 +59,15 @@ class WeeklyTab(QWidget):
         mid_scroll.setFrameShape(QFrame.NoFrame)
         mid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         mid_scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
-        mid_content = QWidget()
-        mid_content.setStyleSheet('background: transparent;')
+        mid_content = QWidget()  # 透明背景由 TRAINING_QSS 全局规则提供（裸声明会压掉按钮背景）
         mid_lay = QVBoxLayout(mid_content)
         mid_lay.setSpacing(Spacing.CARD)
         mid_lay.setContentsMargins(0, 0, 0, 0)
 
-        # ---------- 基本信息卡 ----------
-        info_card = Card('基本信息')
+        # ---------- 连续版面（v25：单张白纸分节，替代多卡框套框） ----------
+        sheet = FormSheet()
+
+        # ---------- 基本信息节 ----------
         gl = QGridLayout()
         gl.setHorizontalSpacing(20)
         gl.setVerticalSpacing(12)
@@ -103,11 +104,9 @@ class WeeklyTab(QWidget):
         self.btn_recommend.clicked.connect(self.on_recommend_weekly)
         gl.addWidget(self.btn_recommend, 2, 3)
         gl.setColumnStretch(1, 1); gl.setColumnStretch(3, 2)
-        info_card.set_content_layout(gl)
-        mid_lay.addWidget(info_card)
+        sheet.add_section('基本信息', gl)
 
-        # ---------- 周计划概览表卡 ----------
-        week_card = Card('周训练计划')
+        # ---------- 周计划概览表节 ----------
         tl = QVBoxLayout()
         tl.setContentsMargins(0, 0, 0, 0)
         tl.setSpacing(Spacing.SM)
@@ -132,11 +131,9 @@ class WeeklyTab(QWidget):
         # 选中行变化时加载明细到编辑区
         self.table.itemSelectionChanged.connect(self._on_row_changed)
         tl.addWidget(self.table)
-        week_card.set_content_layout(tl)
-        mid_lay.addWidget(week_card)
+        sheet.add_section('周训练计划', tl)
 
-        # ---------- 每日训练明细编辑卡 ----------
-        detail_card = Card('每日训练明细（准备 / 教学 / 结束）')
+        # ---------- 每日训练明细编辑节 ----------
         dl = QGridLayout()
         dl.setHorizontalSpacing(20)
         dl.setVerticalSpacing(10)
@@ -184,18 +181,16 @@ class WeeklyTab(QWidget):
         self.te_cooldown.textChanged.connect(self._on_detail_changed)
         dl.addWidget(self.te_cooldown, 8, 0, 1, 4)
         dl.setColumnStretch(1, 2); dl.setColumnStretch(3, 2)
-        detail_card.set_content_layout(dl)
-        mid_lay.addWidget(detail_card, 1)
+        sheet.add_section('每日训练明细（准备 / 教学 / 结束）', dl, stretch=1)
 
-        # ---------- 教练寄语卡 ----------
-        note_card = Card('教练寄语')
+        # ---------- 教练寄语节 ----------
         nl = QVBoxLayout()
         nl.setContentsMargins(0, 0, 0, 0)
         self.te_coach_note = QTextEdit(placeholderText='给家长的寄语（如 请家长督促学员按时完成训练，注意训练安全）')
         self.te_coach_note.setMaximumHeight(80)
         nl.addWidget(self.te_coach_note)
-        note_card.set_content_layout(nl)
-        mid_lay.addWidget(note_card)
+        sheet.add_section('教练寄语', nl)
+        mid_lay.addWidget(sheet, 1)  # 版面必须挂入布局，否则 _init_ui 返回即被 GC（use-after-free 崩溃）
 
         mid_scroll.setWidget(mid_content)
         main_lay.addWidget(mid_scroll, 1)

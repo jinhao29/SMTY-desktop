@@ -25,7 +25,7 @@ from datetime import datetime
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QLinearGradient
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QDateEdit, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QFrame, QTextEdit, QScrollArea
 )
@@ -37,7 +37,7 @@ from styles import Palette, Type, Spacing, Shadow, Radius
 from cards import Card
 # StatCard / IconBox / BarChartWidget 接受 color 参数，传入新令牌色即可统一
 from ui_components import StatCard, IconBox, BarChartWidget, GradientHeroCard
-from base_components import Shapes, Shadows, _fade_color
+from base_components import Shapes, Shadows, _fade_color, paint_card_base, FormSheet
 
 
 class HeroCard(GradientHeroCard):
@@ -49,23 +49,13 @@ class HeroCard(GradientHeroCard):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         radius = Shapes.CARD_RADIUS
-        margin = Shadows.BLUR_STEPS // 2 + 2
-        rect = self.rect().adjusted(margin, margin, -margin, -margin - Shadows.OFFSET_Y)
-        # 弥散阴影
-        painter.setPen(Qt.NoPen)
-        for i in range(Shadows.BLUR_STEPS, 0, -1):
-            alpha = int(Shadows.MAX_ALPHA * (1 - i / (Shadows.BLUR_STEPS + 1)))
-            painter.setBrush(QBrush(QColor(0, 0, 0, alpha)))
-            sr = rect.adjusted(-i, -i + Shadows.OFFSET_Y, i, i + Shadows.OFFSET_Y)
-            painter.drawRoundedRect(sr, radius, radius)
+        rect = self.rect()  # v25 去阴影：无留白，卡片铺满 widget
         # 蓝紫渐变：强调色 → 深强调
         grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
         grad.setColorAt(0, QColor(Palette.ACCENT))
         grad.setColorAt(1, QColor(Palette.ACCENT_PRESSED))
-        painter.setBrush(grad)
-        painter.drawRoundedRect(rect, radius, radius)
+        paint_card_base(painter, rect, radius, 0, fill=QBrush(grad))
         # 文字
         painter.setPen(QColor('#FFFFFF'))
         painter.setFont(Type.caption())
@@ -103,59 +93,61 @@ class StageSummaryScreen(QWidget):
         left_scroll.setFrameShape(QFrame.NoFrame)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
-        left_content = QWidget()
-        left_content.setStyleSheet('background: transparent;')
+        left_content = QWidget()  # 透明背景由 TRAINING_QSS 全局规则提供（裸声明会压掉按钮背景）
         left_lay = QVBoxLayout(left_content)
         left_lay.setSpacing(Spacing.CARD)
         left_lay.setContentsMargins(0, 0, 0, 0)
 
-        # --- 查询条件卡片 ---
-        cond_card = Card('查询条件')
-        cl = QHBoxLayout()
+        # --- 连续版面（v25：单张白纸分节，替代多卡框套框） ---
+        sheet = FormSheet()
+        cl = QVBoxLayout()
         cl.setContentsMargins(0, 0, 0, 0)
-        cl.setSpacing(Spacing.MD)
+        cl.setSpacing(Spacing.SM)
 
+        field_row = QHBoxLayout()
+        field_row.setSpacing(Spacing.MD)
         lbl_student = self._mk_sub_label('学员')
-        cl.addWidget(lbl_student)
+        field_row.addWidget(lbl_student)
         self.cb_student = QComboBox()
         self.cb_student.setMinimumWidth(160)
-        cl.addWidget(self.cb_student)
+        field_row.addWidget(self.cb_student, 1)
 
         lbl_start = self._mk_sub_label('起始')
-        cl.addWidget(lbl_start)
+        field_row.addWidget(lbl_start)
         self.dte_start = QDateEdit()
         self.dte_start.setCalendarPopup(True)
         self.dte_start.setDisplayFormat('yyyy-MM-dd')
         # 默认最近 3 个月
         s, e = summary_processor.default_stage_range(3)
         self.dte_start.setDate(QDate.fromString(s, 'yyyy-MM-dd'))
-        cl.addWidget(self.dte_start)
+        field_row.addWidget(self.dte_start)
 
         lbl_end = self._mk_sub_label('结束')
-        cl.addWidget(lbl_end)
+        field_row.addWidget(lbl_end)
         self.dte_end = QDateEdit()
         self.dte_end.setCalendarPopup(True)
         self.dte_end.setDisplayFormat('yyyy-MM-dd')
         self.dte_end.setDate(QDate.fromString(e, 'yyyy-MM-dd'))
-        cl.addWidget(self.dte_end)
+        field_row.addWidget(self.dte_end)
+        cl.addLayout(field_row)
 
-        cl.addStretch()
-
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(Spacing.SM)
+        btn_row.addStretch()
         self.btn_refresh = QPushButton('刷新学员', objectName='secondary')
         self.btn_refresh.setCursor(Qt.PointingHandCursor)
         self.btn_refresh.clicked.connect(self.refresh_students)
-        cl.addWidget(self.btn_refresh)
+        btn_row.addWidget(self.btn_refresh)
 
         self.btn_gen = QPushButton('生成阶段总结', objectName='primary')
         self.btn_gen.setCursor(Qt.PointingHandCursor)
         self.btn_gen.setMinimumWidth(140)
         self.btn_gen.clicked.connect(self.on_generate)
-        cl.addWidget(self.btn_gen)
-        cond_card.set_content_layout(cl)
-        left_lay.addWidget(cond_card)
+        btn_row.addWidget(self.btn_gen)
+        cl.addLayout(btn_row)
+        sheet.add_section('查询条件', cl)
 
-        # --- 阶段概述卡片 ---
-        overview_card = Card('阶段概述')
+        # --- 阶段概述节 ---
         ol = QVBoxLayout()
         ol.setContentsMargins(0, 0, 0, 0)
         ol.setSpacing(Spacing.SM)
@@ -164,11 +156,9 @@ class StageSummaryScreen(QWidget):
         self.te_overview.setPlaceholderText('点击「生成阶段总结」后，此处显示概述文字。')
         self.te_overview.setFixedHeight(90)
         ol.addWidget(self.te_overview)
-        overview_card.set_content_layout(ol)
-        left_lay.addWidget(overview_card)
+        sheet.add_section('阶段概述', ol)
 
-        # --- 成绩进步对比表 ---
-        score_card = Card('成绩进步对比')
+        # --- 成绩进步对比节 ---
         sl = QVBoxLayout()
         sl.setContentsMargins(0, 0, 0, 0)
         self.table_score = QTableWidget()
@@ -182,11 +172,9 @@ class StageSummaryScreen(QWidget):
         self.table_score.setMinimumHeight(180)
         self.table_score.setAlternatingRowColors(True)
         sl.addWidget(self.table_score)
-        score_card.set_content_layout(sl)
-        left_lay.addWidget(score_card)
+        sheet.add_section('成绩进步对比', sl)
 
-        # --- 阶段内课后反馈表 ---
-        fb_card = Card('阶段内课后反馈')
+        # --- 阶段内课后反馈节 ---
         fl = QVBoxLayout()
         fl.setContentsMargins(0, 0, 0, 0)
         self.table_fb = QTableWidget()
@@ -203,8 +191,8 @@ class StageSummaryScreen(QWidget):
         self.table_fb.setMinimumHeight(220)
         self.table_fb.setAlternatingRowColors(True)
         fl.addWidget(self.table_fb)
-        fb_card.set_content_layout(fl)
-        left_lay.addWidget(fb_card, 1)
+        sheet.add_section('阶段内课后反馈', fl, stretch=1)
+        left_lay.addWidget(sheet, 1)  # 版面必须挂入布局，否则 _init_ui 返回即被 GC（use-after-free 崩溃）
 
         left_scroll.setWidget(left_content)
         main_lay.addWidget(left_scroll, 3)
@@ -215,8 +203,7 @@ class StageSummaryScreen(QWidget):
         right_scroll.setFrameShape(QFrame.NoFrame)
         right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         right_scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
-        right_content = QWidget()
-        right_content.setStyleSheet('background: transparent;')
+        right_content = QWidget()  # 透明背景由 TRAINING_QSS 全局规则提供
         right_lay = QVBoxLayout(right_content)
         right_lay.setSpacing(Spacing.CARD)
         right_lay.setContentsMargins(0, 0, 0, 0)
@@ -224,19 +211,14 @@ class StageSummaryScreen(QWidget):
         self.hero_card = HeroCard('阶段概览', '—', '选择学员并生成总结')
         right_lay.addWidget(self.hero_card)
 
-        # 2x2 数据概览（StatCard 传入新令牌色，图标与高亮统一为蓝紫/蓝/绿）
-        stats_grid = QGridLayout()
-        stats_grid.setSpacing(Spacing.MD)
-        stats_grid.setContentsMargins(0, 0, 0, 0)
+        # 统计卡竖排（v24：2x2 在 ~240px 窄栏里每张不足百像素太挤，1x4 全宽更从容）
         self.stat_lessons = StatCard(IconBox.CALENDAR, '阶段消课', '—', Palette.ACCENT)
         self.stat_feedback = StatCard(IconBox.CHART_BAR, '反馈条数', '—', Palette.ACCENT_BLUE)
         self.stat_score = StatCard(IconBox.CHART_LINE, '成绩变化', '—', Palette.GREEN)
         self.stat_remaining = StatCard(IconBox.ARCHIVE, '剩余课时', '—', Palette.ACCENT)
-        stats_grid.addWidget(self.stat_lessons, 0, 0)
-        stats_grid.addWidget(self.stat_feedback, 0, 1)
-        stats_grid.addWidget(self.stat_score, 1, 0)
-        stats_grid.addWidget(self.stat_remaining, 1, 1)
-        right_lay.addLayout(stats_grid)
+        for _stat in (self.stat_lessons, self.stat_feedback,
+                      self.stat_score, self.stat_remaining):
+            right_lay.addWidget(_stat)
 
         # 成绩变化分布柱状图
         chart_card = Card('项目得分变化')
@@ -269,6 +251,7 @@ class StageSummaryScreen(QWidget):
         right_lay.addStretch()
 
         right_scroll.setWidget(right_content)
+        right_scroll.setMaximumWidth(260)  # 大屏下右栏不过分拉宽，剩余宽度留给左内容
         main_lay.addWidget(right_scroll, 1)
 
     @staticmethod

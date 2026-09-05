@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """训练任务编排模块卡片组件（灰白简约 · 蓝紫强调）。
 
-复用 base_components 已验证的 paintEvent 弥散阴影模式（不引入 QGraphicsDropShadowEffect
-以避免子控件渲染异常），仅替换为新令牌。
+复用 base_components 卡片绘制的平铺模式（v25 起彻底去阴影：卡片平铺、
+1px 描边出轮廓，不引入 QGraphicsDropShadowEffect 以避免子控件渲染异常）。
 
 组件：
 - Card：白底圆角卡片，可选标题 + 内容布局
@@ -13,12 +13,12 @@
 - IconButton：极简图标按钮（Unicode 字形，无图标文件依赖）
 """
 from PySide6.QtCore import Qt, Signal, QRect, QRectF
-from PySide6.QtGui import QFont, QColor, QPainter, QBrush
+from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QPen
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QFrame, QSizePolicy, QLayout
 )
-from styles import Palette, Radius, Spacing, Shadow, Type
+from styles import Palette, Radius, Spacing, Type
 
 
 # ==================== 通用卡片 ====================
@@ -65,20 +65,14 @@ class Card(QFrame):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        radius = Radius.CARD
-        margin = Shadow.BLUR_STEPS // 2 + 2
-        rect = self.rect().adjusted(margin, margin, -margin, -margin - Shadow.OFFSET_Y)
+        # v25 去阴影：卡片平铺，轮廓交给 1px 描边（李哥反馈不要叠加阴影方框）
+        rect = self.rect()
         painter.setPen(Qt.NoPen)
-        # 弥散阴影：多层半透明圆角矩形，由内而外变淡
-        for i in range(Shadow.BLUR_STEPS, 0, -1):
-            alpha = int(Shadow.MAX_ALPHA * (1 - i / (Shadow.BLUR_STEPS + 1)))
-            painter.setBrush(QBrush(Shadow.shadow_color(alpha)))
-            sr = rect.adjusted(-i, -i + Shadow.OFFSET_Y, i, i + Shadow.OFFSET_Y)
-            painter.drawRoundedRect(sr, radius, radius)
-        # 白底卡片
         painter.setBrush(QBrush(QColor(Palette.CARD)))
-        painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(rect, radius, radius)
+        painter.drawRoundedRect(rect, Radius.CARD, Radius.CARD)
+        painter.setPen(QPen(QColor(Palette.DIVIDER), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), Radius.CARD, Radius.CARD)
         painter.end()
 
 

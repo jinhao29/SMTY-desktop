@@ -28,8 +28,8 @@ class ColorPalette:
     主色 #FF6B47 为活力珊瑚橙，用于选中态高亮与主操作按钮。
     背景采用暖白 #F5F7FA，卡片纯白 #FFFFFF，确保双端视觉一致性。
     """
-    BG = '#F5F7FA'              # 主背景：暖白
-    SIDEBAR_BG = '#F5F5F5'      # 侧边栏背景（略深于主背景）
+    BG = '#FFFFFF'              # 主背景：纯白（v25.1 灰底全部去除，仅靠描边分层）
+    SIDEBAR_BG = '#FFFFFF'      # 侧边栏背景（白 + 右侧 1px 描边分界）
     CARD = '#FFFFFF'            # 卡片背景：纯白
     TEXT = '#1A1A1A'            # 主文字：深灰（≥12:1）
     TEXT_SECONDARY = '#6B6B6B'  # 次要文字：中灰（≥4.6:1）
@@ -99,10 +99,16 @@ class FontHelper:
 
 
 class Shadows:
-    """阴影绘制参数（供 BaseCard 等使用）。"""
+    """卡片投影参数。
+
+    BLUR_STEPS // 2 + 2 仍作为卡片白底距 widget 边缘的留白（历史几何，勿动）；
+    MAX_ALPHA 已弃用——旧「多层半透明矩形弥散阴影」在高 DPI 下边缘累计 30%+ 黑度，
+    且外圈被 widget 边界硬裁，视觉成「黑色打底」（2026-09-04 反馈），现统一走
+    paint_card_base 的单层浅投影。
+    """
     OFFSET_Y = 4
     BLUR_STEPS = 10
-    MAX_ALPHA = 22
+    MAX_ALPHA = 22  # deprecated: 仅保留兼容旧引用
 
 
 #==== 颜色工具 ====
@@ -113,6 +119,32 @@ def _fade_color(hex_color: str, alpha_ratio: float) -> str:
     r, g, b = c.red(), c.green(), c.blue()
     a = int(255 * alpha_ratio)
     return f'#{a:02x}{r:02x}{g:02x}{b:02x}'
+
+
+#==== 卡片基底绘制 ====
+
+def paint_card_base(painter, rect, radius, offset_y, shadow_alpha=0,
+                    fill=None, border_color=None):
+    """在 painter 上绘制卡片基底：纯平卡底 + 可选 1px 描边（无阴影）。
+
+    v25 起彻底去阴影（李哥反馈「不要叠加阴影方框」——卡片平铺、以留白与
+    描边分层）。offset_y / shadow_alpha 参数保留兼容旧调用点但不再绘制。
+
+    参数:
+        fill: 卡底 QBrush/QColor（默认纯白）；渐变卡片传 QLinearGradient 的 QBrush
+        border_color: 描边色（None=不描边；渐变卡建议不描边）
+    """
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(Qt.NoPen)
+    # 卡底
+    painter.setBrush(QBrush(fill) if fill is not None else QBrush(QColor(ColorPalette.CARD)))
+    painter.drawRoundedRect(rect, radius, radius)
+    # 1px 描边（adjusted 内缩 1px 保证右侧/底部描边完整落入 widget）
+    if border_color is not None:
+        painter.setPen(QPen(QColor(border_color), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), radius, radius)
+        painter.setPen(Qt.NoPen)
 
 
 #==== 基础卡片 ====
@@ -159,21 +191,70 @@ class BaseCard(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        radius = Shapes.CARD_RADIUS
-        margin = Shadows.BLUR_STEPS // 2 + 2
-        rect = self.rect().adjusted(margin, margin, -margin, -margin - Shadows.OFFSET_Y)
-        # 弥散阴影：多层半透明圆角矩形，由内而外变淡
-        painter.setPen(Qt.NoPen)
-        for i in range(Shadows.BLUR_STEPS, 0, -1):
-            alpha = int(Shadows.MAX_ALPHA * (1 - i / (Shadows.BLUR_STEPS + 1)))
-            brush = QBrush(QColor(0, 0, 0, alpha))
-            painter.setBrush(brush)
-            shadow_rect = rect.adjusted(-i, -i + Shadows.OFFSET_Y, i, i + Shadows.OFFSET_Y)
-            painter.drawRoundedRect(shadow_rect, radius, radius)
-        # 白色卡片背景
-        painter.setBrush(QBrush(QColor(ColorPalette.CARD)))
-        painter.drawRoundedRect(rect, radius, radius)
+        paint_card_base(painter, self.rect(), Shapes.CARD_RADIUS, 0,
+                        border_color=ColorPalette.BORDER)
+        painter.end()
+
+
+#==== 连续版面容器 ====
+
+class FormSheet(QWidget):
+    """整块白色版面：内部以「橙色小节标题 + 1px 分隔线」分节，无框套框。
+
+    替代「多张卡片竖排」的框套框排版（李哥 2026-09-05 反馈：排版要整洁、
+    一下子全部展示、不要叠加阴影方框）。整页只有一个外轮廓，内容连续平铺。
+
+    用法:
+        sheet = FormSheet()
+        lay = QVBoxLayout(); lay.addWidget(...)
+        sheet.add_section('基本信息', lay)
+        sheet.add_section('成绩录入', table_lay, stretch=1)
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_StyledBackground, False)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._lay = QVBoxLayout(self)
+        self._lay.setContentsMargins(16, 14, 16, 16)
+        self._lay.setSpacing(0)
+        self._first_section = True
+
+    def add_section(self, title=None, layout=None, stretch=0, spacing=12):
+        """追加一节。非首节前自动插入分隔线；title 为 None 时只加内容。
+
+        参数:
+            layout: 该节内容布局（QLayout）；表格等需要伸展的节配合 stretch>0
+            spacing: 标题与内容之间的间距
+        返回:
+            传入的 layout（便于链式写法）
+        """
+        if not self._first_section:
+            self._lay.addSpacing(16)
+            line = QFrame()
+            line.setFixedHeight(1)
+            # objectName 限定：裸声明 QSS 会下压后代背景（历史坑）
+            line.setObjectName('formSheetDivider')
+            line.setStyleSheet(
+                f'QFrame#formSheetDivider {{ background-color: {ColorPalette.DIVIDER}; border: none; }}'
+            )
+            self._lay.addWidget(line)
+            self._lay.addSpacing(16)
+        self._first_section = False
+        if title:
+            lbl = QLabel(title)
+            lbl.setFont(FontHelper.section())
+            lbl.setStyleSheet(f'color: {ColorPalette.PRIMARY}; background: transparent;')
+            self._lay.addWidget(lbl)
+            self._lay.addSpacing(spacing)
+        if layout is not None:
+            self._lay.addLayout(layout, stretch)
+        return layout
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        paint_card_base(painter, self.rect(), Shapes.CARD_RADIUS, 0,
+                        border_color=ColorPalette.BORDER)
         painter.end()
 
 
@@ -194,6 +275,7 @@ class IconBox(QWidget):
     CALENDAR = 9
     DUMBBELL = 10
     ARCHIVE = 11
+    WHISTLE = 12
 
     def __init__(self, icon_type, size=40, bg_color=None, fg_color=None, parent=None):
         super().__init__(parent)
@@ -291,6 +373,13 @@ def _draw_icon(painter: QPainter, icon_type: int, rect: QRect):
         painter.drawRect(int(x + w * 0.2), int(y + h * 0.25), int(w * 0.6), int(h * 0.6))
         painter.drawLine(int(x + w * 0.4), int(y + h * 0.35), int(x + w * 0.6), int(y + h * 0.35))
         painter.drawLine(int(x + w * 0.35), int(y + h * 0.55), int(x + w * 0.65), int(y + h * 0.55))
+    elif icon_type == IconBox.WHISTLE:
+        # 哨身：左侧大圆 + 圆上小孔 + 右侧短柄（极简线框）
+        painter.drawEllipse(int(x + w * 0.08), int(y + h * 0.30), int(w * 0.48), int(h * 0.48))
+        painter.drawEllipse(int(x + w * 0.22), int(y + h * 0.44), int(w * 0.16), int(h * 0.16))
+        painter.drawLine(int(x + w * 0.52), int(y + h * 0.42), int(x + w * 0.92), int(y + h * 0.42))
+        painter.drawLine(int(x + w * 0.52), int(y + h * 0.64), int(x + w * 0.92), int(y + h * 0.64))
+        painter.drawLine(int(x + w * 0.92), int(y + h * 0.42), int(x + w * 0.92), int(y + h * 0.64))
 
 
 class StatCell(QFrame):

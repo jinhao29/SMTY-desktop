@@ -17,6 +17,7 @@ from base_components import (
     FontHelper,
     Shadows,
     BaseCard,
+    FormSheet,
     IconBox,
     _draw_icon,
     _fade_color,
@@ -39,7 +40,7 @@ __all__ = [
     # 视觉令牌
     'ColorPalette', 'Shapes', 'FontHelper', 'Shadows',
     # 基础组件
-    'BaseCard', 'IconBox', '_draw_icon', '_fade_color',
+    'BaseCard', 'FormSheet', 'IconBox', '_draw_icon', '_fade_color',
     # 业务卡片
     'StatCard', 'GradientHeroCard',
     # 图表

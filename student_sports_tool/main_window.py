@@ -16,7 +16,7 @@ from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor, QIntValidator
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QFormLayout, QLabel, QLineEdit, QComboBox, QRadioButton, QButtonGroup,
+    QLabel, QLineEdit, QComboBox, QRadioButton, QButtonGroup,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit,
     QMessageBox, QFileDialog, QDateEdit, QFrame, QScrollArea, QSizePolicy
 )
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from standards import get_primary_standards, get_zhongkao_standards
 from scorer import calc_score, format_value
 from ui_components import (
-    ColorPalette, FontHelper, BaseCard, StatCard, IconBox
+    ColorPalette, FontHelper, FormSheet, StatCard, IconBox
 )
 import archive_controller as ac
 
@@ -93,36 +93,43 @@ class MainWindow(QMainWindow):
             header_row.addWidget(_pill)
         mid_lay.addLayout(header_row)
 
-        # 顶部个人信息栏（学员与目录水平并排，不再分两行堆叠）
-        info_card = BaseCard('学员与目录')
-        info_lay = QHBoxLayout()
-        info_lay.setSpacing(18)
+        # 连续版面（v25：单张白纸，区块用小节标题+分隔线分节，替代多卡框套框）
+        sheet = FormSheet()
+
+        # --- 学员与目录 ---
+        info_lay = QVBoxLayout()
+        info_lay.setSpacing(10)
         info_lay.setContentsMargins(0, 0, 0, 0)
-        # 目录选择
-        info_lay.addWidget(QLabel('目录'))
+        # 第一行：档案目录
+        dir_row = QHBoxLayout()
+        dir_row.setSpacing(10)
+        dir_row.addWidget(QLabel('目录'))
         self.le_dir = QLineEdit(self._dir_path)
+        dir_row.addWidget(self.le_dir, 1)
         self.btn_dir_browse = QPushButton('浏览', objectName='secondary')
         self.btn_dir_browse.clicked.connect(self.on_dir_browse)
+        dir_row.addWidget(self.btn_dir_browse)
         self.btn_refresh = QPushButton('刷新学员', objectName='secondary')
         self.btn_refresh.clicked.connect(lambda: self.refresh_students())
-        info_lay.addWidget(self.le_dir, 2)
-        info_lay.addWidget(self.btn_dir_browse)
-        info_lay.addWidget(self.btn_refresh)
-        # 学员选择（与目录水平并排）
-        info_lay.addWidget(QLabel('学员'))
+        dir_row.addWidget(self.btn_refresh)
+        info_lay.addLayout(dir_row)
+        # 第二行：学员选择
+        stu_row = QHBoxLayout()
+        stu_row.setSpacing(10)
+        stu_row.addWidget(QLabel('学员'))
         self.cb_student = QComboBox()
         self.cb_student.currentIndexChanged.connect(self.on_student_selected)
-        info_lay.addWidget(self.cb_student, 2)
+        stu_row.addWidget(self.cb_student, 1)
         self.lbl_history = QLabel('（请选择或新建学员）')
         self.lbl_history.setStyleSheet(f'color: {ColorPalette.TEXT_SECONDARY};')
-        info_lay.addWidget(self.lbl_history, 3)
-        info_card.set_content_layout(info_lay)
-        mid_lay.addWidget(info_card)
+        stu_row.addWidget(self.lbl_history, 2)
+        info_lay.addLayout(stu_row)
+        sheet.add_section('学员与目录', info_lay)
 
-        # 基本信息卡
-        info_form_card = BaseCard('基本信息')
-        form = QFormLayout()
-        form.setSpacing(12)
+        # 基本信息卡（v24：双列网格，10 字段 5 行放下，避免单列过长滚动疲劳）
+        form = QGridLayout()
+        form.setHorizontalSpacing(24)
+        form.setVerticalSpacing(14)
         form.setContentsMargins(0, 0, 0, 0)
         self.le_name = QLineEdit(placeholderText='学员姓名')
         self.le_age = QLineEdit(placeholderText='如 7（7岁以下不显示年级）')
@@ -142,6 +149,8 @@ class MainWindow(QMainWindow):
         bg_sex.addButton(self.rb_boy)
         bg_sex.addButton(self.rb_girl)
         sex_w = QWidget()
+        sex_w.setObjectName('sexRow')  # 全局 QWidget 有灰底，白版面上需透明（裸声明会下压后代，必须限定）
+        sex_w.setStyleSheet('QWidget#sexRow { background: transparent; }')
         sex_lay = QHBoxLayout(sex_w)
         sex_lay.setContentsMargins(0, 0, 0, 0)
         sex_lay.setSpacing(14)
@@ -151,21 +160,24 @@ class MainWindow(QMainWindow):
         for name, *_ in ac.TYPE_OPTIONS:
             self.cb_type.addItem(name)
         self.cb_type.currentIndexChanged.connect(self.on_type_changed)
-        form.addRow('姓名', self.le_name)
-        form.addRow('年龄', self.le_age)
-        form.addRow('性别', sex_w)
-        form.addRow('档案类型', self.cb_type)
-        form.addRow('学校', self.le_school)
-        form.addRow('联系电话', self.le_phone)
-        form.addRow('总课时', self.le_total_lessons)
-        form.addRow('测评日期', self.dte_date)
-        form.addRow('本次课时数', self.le_lesson_count)
-        form.addRow('本次训练内容', self.le_lesson_content)
-        info_form_card.set_content_layout(form)
-        mid_lay.addWidget(info_form_card)
+        # 左列 label 列 0/2，字段列 1/3；短字段配对成 5 行
+        _rows = [
+            ('姓名', self.le_name, '年龄', self.le_age),
+            ('性别', sex_w, '档案类型', self.cb_type),
+            ('学校', self.le_school, '联系电话', self.le_phone),
+            ('总课时', self.le_total_lessons, '测评日期', self.dte_date),
+            ('本次课时数', self.le_lesson_count, '本次训练内容', self.le_lesson_content),
+        ]
+        for r, (lab1, w1, lab2, w2) in enumerate(_rows):
+            form.addWidget(QLabel(lab1), r, 0)
+            form.addWidget(w1, r, 1)
+            form.addWidget(QLabel(lab2), r, 2)
+            form.addWidget(w2, r, 3)
+        form.setColumnStretch(1, 1)
+        form.setColumnStretch(3, 1)
+        sheet.add_section('基本信息', form)
 
         # 成绩录入
-        table_card = BaseCard('成绩录入（实测成绩填写后自动评分）')
         tlay = QVBoxLayout()
         tlay.setSpacing(12)
         tlay.setContentsMargins(0, 0, 0, 0)
@@ -174,19 +186,18 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemChanged.connect(self.on_item_changed)
         tlay.addWidget(self.table)
-        table_card.set_content_layout(tlay)
-        mid_lay.addWidget(table_card, 1)
+        self.table.setMinimumHeight(260)
+        sheet.add_section('成绩录入（实测成绩填写后自动评分）', tlay, stretch=1)
 
         # 综合评价
-        eval_card = BaseCard('综合评价与提升建议（选填）')
         elay = QVBoxLayout()
         elay.setSpacing(12)
         elay.setContentsMargins(0, 0, 0, 0)
         self.te_eval = QTextEdit(placeholderText='填写综合评价、优势项目、提分建议等...')
         self.te_eval.setFixedHeight(100)
         elay.addWidget(self.te_eval)
-        eval_card.set_content_layout(elay)
-        mid_lay.addWidget(eval_card)
+        sheet.add_section('综合评价与提升建议（选填）', elay)
+        mid_lay.addWidget(sheet, 1)
 
         # 底部按钮
         btn_w = QWidget()
@@ -263,7 +274,7 @@ class MainWindow(QMainWindow):
                     if j == 0:
                         it.setForeground(QColor('#FF6B47'))
                 elif j == 4:
-                    it.setBackground(QColor('#F5F7FA' if i % 2 == 0 else '#FFFFFF'))
+                    it.setBackground(QColor('#FFFFFF'))
                     it.setForeground(QColor('#1A1A1A'))
                 self.table.setItem(i, j, it)
         if ttype == 'zhongkao_old':

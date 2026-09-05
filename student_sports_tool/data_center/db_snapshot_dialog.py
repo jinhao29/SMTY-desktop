@@ -121,7 +121,7 @@ class DbSnapshotDialog(QDialog):
         self.lbl_detail = QLabel('')
         self.lbl_detail.setStyleSheet(
             'color:#6B6B6B; font-size:11px; padding:8px 10px;'
-            'background:#F5F7FA; border:1px solid #E5E5E5; border-radius:8px;'
+            'background:#FFFFFF; border:1px solid #E5E5E5; border-radius:8px;'
         )
         self.lbl_detail.setWordWrap(True)
         self.lbl_detail.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)

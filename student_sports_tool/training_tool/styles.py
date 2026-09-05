@@ -18,7 +18,7 @@ from PySide6.QtGui import QFont, QColor
 # ==================== 色彩令牌 ====================
 
 class Palette:
-    BG = '#F2F4F8'              # 主背景：浅灰
+    BG = '#FFFFFF'              # 主背景：纯白（v25.1 去灰底）
     CARD = '#FFFFFF'            # 卡片背景
     TEXT = '#1A1A2E'            # 主文字：深灰
     TEXT_SUB = '#6B7280'        # 次文字：中灰
@@ -32,7 +32,7 @@ class Palette:
     BORDER = '#E5E7EB'          # 通用边框
     TAG_BG = '#F3F4F6'          # 标签背景
     TAG_TEXT = '#374151'        # 标签文字
-    STATUS_BG = '#F9FAFB'       # 底部状态栏背景
+    STATUS_BG = '#FFFFFF'       # 底部状态栏背景（v25.1 去灰底，靠上边框分界）
     HEADER_BG = '#FFFFFF'       # 顶部导航栏背景
     GREEN = '#10B981'           # 同步成功
     RED = '#EF4444'             # 危险
@@ -221,7 +221,7 @@ TRAINING_QSS = f"""
 
 /* 表格 */
 #training_root QTableWidget {{
-    background: {Palette.CARD}; alternate-background-color: #F9FAFB;
+    background: {Palette.CARD}; alternate-background-color: #FFFFFF;
     gridline-color: transparent; border: 1px solid {Palette.DIVIDER};
     border-radius: {Radius.CARD}px; color: {Palette.TEXT};
     selection-background-color: {Palette.ACCENT_LIGHT}; selection-color: {Palette.ACCENT};
@@ -233,11 +233,11 @@ TRAINING_QSS = f"""
     background: {Palette.ACCENT_LIGHT}; color: {Palette.ACCENT};
 }}
 #training_root QHeaderView::section {{
-    background: #F9FAFB; color: {Palette.TEXT_SUB}; padding: 10px;
+    background: #FFFFFF; color: {Palette.TEXT_SUB}; padding: 10px;
     border: none; border-bottom: 1px solid {Palette.DIVIDER};
     font-weight: 600; font-size: 12px;
 }}
-#training_root QTableCornerButton::section {{ background: #F9FAFB; border: none; }}
+#training_root QTableCornerButton::section {{ background: #FFFFFF; border: none; }}
 
 /* 列表 */
 #training_root QListWidget {{

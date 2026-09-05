@@ -33,6 +33,7 @@ COLUMNS = [
     ('已上', 'attended', True),
     ('剩余', 'remaining', True),
     ('状态', 'status_label', False),
+    ('操作', '_actions', False),
 ]
 
 # 数值列索引集合（用于排序时区分数值/文本）
@@ -146,6 +147,9 @@ class StudentTableModel(QAbstractTableModel):
             return _format_value(key, s)
 
         if role == Qt.TextAlignmentRole:
+            # 操作列左对齐，其余居中
+            if key == '_actions':
+                return int(Qt.AlignVCenter | Qt.AlignLeft)
             return Qt.AlignCenter
 
         if role == Qt.ForegroundRole:
@@ -184,6 +188,18 @@ class StudentTableModel(QAbstractTableModel):
                 return font
             return None
 
+        if role == Qt.UserRole + 1:
+            # 操作列 delegate 的 muted 标记（AvatarNameDelegate / RowActionsDelegate）
+            if key == '_actions':
+                return is_active
+            return None
+
+        if role == Qt.UserRole + 2:
+            # 操作列按钮组 key：在职行（编辑/课时/停用）vs 停用行（恢复）
+            if key == '_actions':
+                return 'active' if is_active else 'inactive'
+            return None
+
         return None
 
     def get_student_at(self, row: int) -> Dict[str, Any]:
@@ -203,15 +219,18 @@ class StudentTableModel(QAbstractTableModel):
 
 
 class StudentSortFilterProxyModel(QSortFilterProxyModel):
-    """学员表格排序 + 搜索过滤代理模型。
+    """学员表格排序 + 搜索 + 状态筛选代理模型。
 
     - 搜索关键字匹配姓名或年级（不区分大小写）
+    - 状态筛选（筛选 chips）：'all' 全部在职 | 'normal' 正常 |
+      'red' 需续费 | 'yellow' 课时关注 | 'inactive' 仅已停用
     - 排序：数值列按 float 比较，文本列按本地化字符串比较
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._keyword: str = ''
+        self._status_filter: str = 'all'
 
     def set_keyword(self, keyword: str):
         """设置搜索关键字（空串表示无过滤）。"""
@@ -221,15 +240,44 @@ class StudentSortFilterProxyModel(QSortFilterProxyModel):
         self._keyword = kw
         self.invalidateFilter()
 
+    def set_status_filter(self, key: str):
+        """设置状态筛选 key（chips 切换时调用）。"""
+        key = key or 'all'
+        if key == self._status_filter:
+            return
+        self._status_filter = key
+        self.invalidateFilter()
+
+    def _status_accept(self, s: Dict[str, Any]) -> bool:
+        """按当前 chips 状态判断学员是否通过。"""
+        is_active = s.get('is_active', True)
+        level = s.get('warn_level', 'normal')
+        f = self._status_filter
+        if f == 'all':
+            return is_active
+        if f == 'inactive':
+            return not is_active
+        if not is_active:
+            return False
+        if f == 'normal':
+            return level in ('normal', 'unknown')
+        if f == 'red':
+            return level == 'red'
+        if f == 'yellow':
+            return level == 'yellow'
+        return True
+
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        if not self._keyword:
-            return True
         sm = self.sourceModel()
         if not isinstance(sm, StudentTableModel):
             return True
         s = sm.get_student_at(source_row)
         if not s:
             return False
+        if not self._status_accept(s):
+            return False
+        if not self._keyword:
+            return True
         name = (s.get('name', '') or '').lower()
         grade = (s.get('grade', '') or '').lower()
         return self._keyword in name or self._keyword in grade

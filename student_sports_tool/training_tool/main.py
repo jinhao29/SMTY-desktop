@@ -80,8 +80,9 @@ class MainWindow(QMainWindow):
             root.addWidget(self.top_nav)
 
         # ===== 内容区：页面边距 24px =====
+        # v24：透明背景交给 TRAINING_QSS 的 `#training_root QWidget` 全局规则；
+        # 裸声明 setStyleSheet('background: transparent;') 会下压覆盖后代按钮背景（primary 曾隐形）
         content = QWidget()
-        content.setStyleSheet('background: transparent;')
         content_lay = QVBoxLayout(content)
         content_lay.setContentsMargins(Spacing.PAGE, Spacing.PAGE, Spacing.PAGE, Spacing.PAGE)
         content_lay.setSpacing(Spacing.CARD)
@@ -97,7 +98,6 @@ class MainWindow(QMainWindow):
 
         # ===== 三列壳：中列页面栈 + 右列操作面板 =====
         body = QWidget()
-        body.setStyleSheet('background: transparent;')
         body_lay = QHBoxLayout(body)
         body_lay.setContentsMargins(0, 0, 0, 0)
         body_lay.setSpacing(Spacing.CARD)
@@ -167,6 +167,8 @@ class MainWindow(QMainWindow):
             names = ['单次训练单', '周计划表', '阶段总结']
             if 0 <= idx < len(names):
                 self.status_bar.set_status(f'就绪 · {names[idx]}')
+            # 阶段总结子页自带导出卡，外层操作面板对其冗余；隐藏后把宽度还给内容区
+            self.right_panel.setVisible(idx != 2)
             if idx == 0 and hasattr(self, 'tab_single'):
                 self.tab_single.refresh_students()
             elif idx == 1 and hasattr(self, 'tab_week'):

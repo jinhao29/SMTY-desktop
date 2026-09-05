@@ -86,7 +86,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QSystemTrayIcon, QMessageBox, QLineEdit, QLabel, QSizePolicy
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 from theme import LIGHT_QSS
 from side_navigation import SideNav
@@ -109,9 +109,11 @@ UPDATE_REPO = ''
 # === 页面索引常量（与 SideNav 菜单项顺序严格对应） ===
 PAGE_HOME = 0
 PAGE_PROFILE = 1
-PAGE_ARCHIVE = 2
-PAGE_TRAINING = 3
-PAGE_DATA_CENTER = 4
+PAGE_COACH = 2
+PAGE_ARCHIVE = 3
+PAGE_TRAINING = 4
+PAGE_DATA_CENTER = 5
+PAGE_FINANCE = 6
 
 
 class App(QMainWindow):
@@ -133,8 +135,9 @@ class App(QMainWindow):
             self.setMinimumSize(1024, 600)
 
         # === 主容器：左右分栏 ===
+        # v24 裸声明 setStyleSheet('background-color:...') 会下压覆盖后代按钮的 QSS 背景
+        # （#primary 按钮曾因此隐形），背景统一交给 theme.LIGHT_QSS 的全局 QWidget 规则
         central = QWidget()
-        central.setStyleSheet('background-color: #F5F7FA;')
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
@@ -145,8 +148,10 @@ class App(QMainWindow):
         menu_items = [
             ('首页', PAGE_HOME, IconBox.HOME),
             ('学员档案', PAGE_PROFILE, IconBox.USER),
+            ('教练管理', PAGE_COACH, IconBox.WHISTLE),
             ('体测档案与课时', PAGE_ARCHIVE, IconBox.CHART_BAR),
             ('训练任务编排', PAGE_TRAINING, IconBox.DUMBBELL),
+            ('财务管理', PAGE_FINANCE, IconBox.CHART_LINE),
             ('数据中心', PAGE_DATA_CENTER, IconBox.ARCHIVE),
         ]
         self.side_nav = SideNav(menu_items, title='上门体育')
@@ -158,7 +163,6 @@ class App(QMainWindow):
 
         # === 右侧：顶部栏 + QStackedWidget ===
         right = QWidget()
-        right.setStyleSheet('background-color: #F5F7FA;')
         right_lay = QVBoxLayout(right)
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.setSpacing(0)
@@ -168,7 +172,7 @@ class App(QMainWindow):
 
         # QStackedWidget：业务页面切换
         self.stack = QStackedWidget()
-        self.stack.setStyleSheet('QStackedWidget { background-color: #F5F7FA; border: none; }')
+        self.stack.setStyleSheet('QStackedWidget { background-color: #FFFFFF; border: none; }')
         right_lay.addWidget(self.stack, 1)
         root.addWidget(right, 1)
 
@@ -193,21 +197,34 @@ class App(QMainWindow):
         )
         self.stack.addWidget(self.profile_screen)
 
-        # Page 2：体测档案与课时管理
+        # Page 2：教练管理（教练档案.xlsx，软删除离职/恢复）
+        from coach_screen import CoachScreen
+        self.coach_screen = CoachScreen(
+            archive_dir_getter=lambda: self.archive_win.le_dir.text().strip()
+        )
+        self.stack.addWidget(self.coach_screen)
+
+        # Page 3：体测档案与课时管理
         self.stack.addWidget(archive_widget)
 
-        # Page 3：训练任务编排
+        # Page 4：训练任务编排
         self.training_win = training_mod.MainWindow()
         training_widget = self.training_win.takeCentralWidget()
         self.stack.addWidget(training_widget)
 
-        # Page 4：数据中心
+        # Page 5：数据中心
         from data_center_window import DataCenterWindow
         self.data_center = DataCenterWindow()
         self.data_center.set_archive_dir(self.archive_win.get_current_directory())
         # 训练工具的模板库弱项推荐也需要档案目录
         self.training_win.set_archive_dir_getter(self.data_center.get_current_directory)
         self.stack.addWidget(self.data_center)
+
+        # Page 6：财务管理（记账）——必须在数据中心之后 addWidget（stack 按顺序索引）
+        from finance_page import FinancePage
+        self.finance_page = FinancePage()
+        self.finance_page.set_archive_dir(self.archive_win.get_current_directory())
+        self.stack.addWidget(self.finance_page)
 
         # 默认选中首页
         self.side_nav.select(PAGE_HOME)
@@ -219,11 +236,34 @@ class App(QMainWindow):
         self._tray = None
         self._sync_mgr = None
 
+        # === v23.5 双端同步：随主程序自动开启同步服务（手机/USB 即插即连）===
+        # - config sync_auto_start 默认 True；数据中心「双端同步」面板可启停
+        # - 含心跳广播（Wi-Fi 自动发现）+ USB adb reverse 自动连接 + 防火墙自动放行
+        try:
+            from data_center.sync_service import get_service
+            from data_center import config_manager as _cm
+            _dir = self.archive_win.get_current_directory()
+            _cfg = _cm.load_config(_dir)
+            if _cfg.get('sync_auto_start', True):
+                _svc = get_service()
+                _svc.add_log_callback(lambda line: logging.info(line))
+                _svc.start(
+                    port=int(_cfg.get('sync_port') or 8765),
+                    token=str(_cfg.get('sync_token') or ''),
+                    archive_dir=_dir,
+                )
+        except Exception:
+            logging.exception('自动启动同步服务失败')
+
     def _build_top_bar(self, parent_layout):
         """构建右侧顶部栏：同步状态 + 用户信息（全局搜索已移入侧边栏并接通过滤）。"""
         top = QWidget()
         top.setFixedHeight(56)
-        top.setStyleSheet('background-color: #FFFFFF; border-bottom: 1px solid #E5E5E5;')
+        top.setObjectName('topBar')  # 裸声明会下压后代按钮 QSS，必须 objectName 限定
+        top.setStyleSheet(
+            'QWidget#topBar { background-color: #FFFFFF; '
+            'border-bottom: 1px solid #E5E5E5; }'
+        )
         lay = QHBoxLayout(top)
         lay.setContentsMargins(24, 8, 24, 8)
         lay.setSpacing(12)
@@ -251,6 +291,21 @@ class App(QMainWindow):
         ''')
         lay.addWidget(self.lbl_sync)
 
+        # v23.6：手机在线指示（轮询 config sync_devices 的 last_seen，5 分钟内算在线）
+        self.lbl_devices = QLabel('○  手机未连接')
+        self.lbl_devices.setStyleSheet('''
+            color: #9B9B9B;
+            font-size: 12px;
+            font-weight: 500;
+            background: transparent;
+            padding: 0 8px;
+        ''')
+        lay.addWidget(self.lbl_devices)
+        self._device_timer = QTimer(self)
+        self._device_timer.timeout.connect(self._refresh_device_indicator)
+        self._device_timer.start(30_000)
+        QTimer.singleShot(3_000, self._refresh_device_indicator)
+
         # 用户信息
         user = QLabel('●  教练')
         user.setStyleSheet('''
@@ -264,9 +319,46 @@ class App(QMainWindow):
 
         parent_layout.addWidget(top)
 
+    def _refresh_device_indicator(self):
+        """v23.6：刷新顶栏「手机在线」指示（config sync_devices 最近回执 5 分钟内算在线）。"""
+        try:
+            from data_center import config_manager as _cm
+            import time as _time
+            cfg = _cm.load_config(self.archive_win.get_current_directory())
+            devices = cfg.get('sync_devices') or {}
+            online = []
+            for dev in devices.values():
+                try:
+                    last = _time.mktime(_time.strptime(
+                        dev.get('last_seen', ''), '%Y-%m-%d %H:%M:%S'))
+                    if _time.time() - last < 300:
+                        online.append(dev.get('name') or '手机')
+                except (ValueError, TypeError, OSError):
+                    continue
+            if online:
+                self.lbl_devices.setText('●  手机在线：%s' % '、'.join(online[:2]))
+                self.lbl_devices.setStyleSheet('''
+                    color: #34D399;
+                    font-size: 12px;
+                    font-weight: 600;
+                    background: transparent;
+                    padding: 0 8px;
+                ''')
+            else:
+                self.lbl_devices.setText('○  手机未连接')
+                self.lbl_devices.setStyleSheet('''
+                    color: #9B9B9B;
+                    font-size: 12px;
+                    font-weight: 500;
+                    background: transparent;
+                    padding: 0 8px;
+                ''')
+        except Exception:
+            pass  # 配置读取失败静默保持原状
+
     # === 导航事件处理 ===
 
-    _PAGE_TITLES = ('首页', '学员档案', '体测档案与课时', '训练任务编排', '数据中心')
+    _PAGE_TITLES = ('首页', '学员档案', '教练管理', '体测档案与课时', '训练任务编排', '数据中心', '财务管理')
 
     def _on_page_changed(self, index: int):
         """侧边栏菜单项点击：切换 QStackedWidget 页面。"""
@@ -321,16 +413,21 @@ class App(QMainWindow):
         """切换页面时同步档案目录到数据中心与学员档案。
 
         页面索引（与 PAGE_* 常量一致）：
-            0 首页 | 1 学员档案 | 2 体测档案与课时 | 3 训练任务编排 | 4 数据中心
+            0 首页 | 1 学员档案 | 2 教练管理 | 3 体测档案与课时 | 4 训练任务编排 | 5 数据中心
         """
         try:
             archive_dir = self.archive_win.le_dir.text().strip()
             if archive_dir:
                 if archive_dir != self.data_center.le_dir.text():
                     self.data_center.set_archive_dir(archive_dir)
+                if archive_dir != self.finance_page.get_current_directory():
+                    self.finance_page.set_archive_dir(archive_dir)
                 # 切换到学员档案页时自动刷新
                 if index == PAGE_PROFILE and hasattr(self, 'profile_screen'):
                     self.profile_screen.refresh()
+                # 切换到教练管理页时自动刷新
+                if index == PAGE_COACH and hasattr(self, 'coach_screen'):
+                    self.coach_screen.refresh()
             # 切换到训练任务编排页时，刷新当前子页的学员下拉列表
             if index == PAGE_TRAINING and hasattr(self, 'training_win'):
                 self.training_win.refresh_current_tab_students()
