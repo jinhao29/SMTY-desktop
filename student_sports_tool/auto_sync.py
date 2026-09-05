@@ -62,6 +62,13 @@ class SyncWorker(QThread):
                 self.failed.emit(f'自动同步已拒绝：{reason}')
                 return
 
+            # v23.8 安全锁：零内容备份不得合并进非空档案目录（防清空）
+            from backup_validator import reject_wiped_backup
+            ok, reason = reject_wiped_backup(self._zip_path, self._target_dir)
+            if not ok:
+                self.failed.emit(reason)
+                return
+
             # 延迟导入避免循环
             from data_center import backup_coordinator as bc
             count = 0

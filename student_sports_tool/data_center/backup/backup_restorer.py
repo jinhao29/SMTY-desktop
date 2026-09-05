@@ -262,13 +262,17 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
             continue
         lessons_by_name.setdefault(name, []).append(les)
 
-    # 按学员名聚合课时包
-    pkg_by_name = {}
+    # 课时包：手机端一学员可有多包，PC 汇总是单值 → 取「未退费包 total 之和」。
+    # 旧实现取最后一个包（dict 后写覆盖），学员在手机买了第二个包后 PC 总课时被
+    # 覆盖成新包值（应购 30 只剩 20）——双端课时包不统一的根源之一。
+    pkg_totals = {}
     for pkg in packages:
         name = pkg.get('student_name', '').strip()
         if not name:
             continue
-        pkg_by_name[name] = pkg
+        if pkg.get('status') == '已退费':
+            continue
+        pkg_totals[name] = pkg_totals.get(name, 0) + _to_int(pkg.get('total'))
 
     # === 幂等合并（v23.6 修复）：手机备份是全量快照，自动同步会反复推送同一批
     # 课时；add_lesson 无去重，二次推送曾导致 PC 明细/已上课时翻倍放大。
@@ -377,13 +381,19 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 logging.error(f'同步课时失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)
                 continue
 
-        # 同步课时包总课时
-        pkg = pkg_by_name.get(name)
-        if pkg and pkg.get('total'):
+        # 同步课时包总课时（安全锁：单调不减）
+        # PC 总课时只增不减——手机推送的 Σ(未退费包) 小于 PC 现值时（PC 手工加过
+        # 课时/收费，或手机端退费）不动 PC 现值，防止旧手机备份把已购课时改小。
+        # 购买只在两端追加、退款需教练两端手工操作：删除/退款不自动传播（协议原则）。
+        phone_total = pkg_totals.get(name, 0)
+        if phone_total > 0:
             try:
-                lesson_manager.set_total_lessons(
-                    target_dir, effective_name, int(pkg['total'])
-                )
+                pc_row = lesson_manager.get_lesson_summary(target_dir, effective_name)
+                pc_total = _to_int(pc_row.get('total')) if pc_row else 0
+                if phone_total > pc_total:
+                    lesson_manager.set_total_lessons(
+                        target_dir, effective_name, phone_total
+                    )
             except (FileNotFoundError, PermissionError) as e:
                 logging.error(f'同步课时包失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)
 

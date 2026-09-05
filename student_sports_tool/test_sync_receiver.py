@@ -344,6 +344,144 @@ def test_repeated_push_idempotent():
         server.shutdown()
 
 
+# ==================== v23.8 数据真统一 + 安全锁 ====================
+
+def test_multi_package_sum_to_pc():
+    """手机多课时包 → PC 汇总取「未退费包之和」且单调不减（v23.8 修复 last-wins）。
+
+    场景：学员手机买了 20+10 两包 → PC 总课时应为 30（旧实现只落最后一包 10）；
+    随后推一个旧备份（总量 20）→ PC 保持 30（安全锁：购买只增不减）。
+    """
+    archive_dir = tempfile.mkdtemp(prefix='smty_mpkg_')
+    save_dir = tempfile.mkdtemp(prefix='smty_mpkg2_')
+    server, base = _make_server(archive_dir, save_dir)
+    try:
+        pkg_a = dict(PACKAGE, total=20)
+        pkg_b = dict(PACKAGE, total=10)
+        data = _make_phone_backup([STUDENT], [LESSON], [pkg_a, pkg_b])
+        req = urllib.request.Request(
+            base + '/upload', data=data, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        urllib.request.urlopen(req, timeout=30).read()
+
+        import lesson_manager as lm
+        total = {s['name']: s for s in lm.get_summary(archive_dir)}['同步测试学员']['total']
+        assert total == 30, f'PC 总课时应为两包之和 30，实际 {total}'
+
+        # 旧备份（总量 20）再推 → 单调锁：PC 总课时不得被改小
+        old = _make_phone_backup([STUDENT], [], [dict(PACKAGE, total=20)])
+        req2 = urllib.request.Request(
+            base + '/upload', data=old, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        urllib.request.urlopen(req2, timeout=30).read()
+        total2 = {s['name']: s for s in lm.get_summary(archive_dir)}['同步测试学员']['total']
+        assert total2 == 30, f'旧备份推送后 PC 总课时应保持 30，实际 {total2}（被改小）'
+    finally:
+        server.shutdown()
+
+
+def test_empty_backup_rejected_by_safety_lock():
+    """安全锁：零内容备份不得合并进非空档案目录（防手机清库后反复推空备份）。"""
+    archive_dir = tempfile.mkdtemp(prefix='smty_lock_')
+    save_dir = tempfile.mkdtemp(prefix='smty_lock2_')
+    server, base = _make_server(archive_dir, save_dir)
+    try:
+        # 先正常合并一名学员，档案目录非空
+        data = _make_phone_backup([STUDENT], [LESSON], [PACKAGE])
+        req = urllib.request.Request(
+            base + '/upload', data=data, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        urllib.request.urlopen(req, timeout=30).read()
+
+        # 空库备份（手机重装/清数据）→ 422 拒绝
+        empty = _make_phone_backup([], [], [])
+        req2 = urllib.request.Request(
+            base + '/upload', data=empty, method='POST',
+            headers={'X-Sync-Token': 'test_token',
+                     'X-Backup-Name': 'smty_backup_empty.smty_backup'})
+        try:
+            urllib.request.urlopen(req2, timeout=30)
+            assert False, '空备份应被安全锁 422 拒绝'
+        except urllib.error.HTTPError as e:
+            assert e.code == 422, e.code
+            body = json.loads(e.read().decode('utf-8'))
+            assert '安全锁' in body['message'], body
+
+        # 档案目录数据完好
+        import os as _os
+        assert _os.path.exists(_os.path.join(archive_dir, '同步测试学员.xlsx'))
+    finally:
+        server.shutdown()
+
+
+def test_empty_backup_allowed_on_fresh_archive():
+    """安全锁不误伤：空档案目录（全新 PC）接受空备份（无数据可保护）。"""
+    archive_dir = tempfile.mkdtemp(prefix='smty_fresh_')
+    save_dir = tempfile.mkdtemp(prefix='smty_fresh2_')
+    server, base = _make_server(archive_dir, save_dir)
+    try:
+        empty = _make_phone_backup([], [], [])
+        req = urllib.request.Request(
+            base + '/upload', data=empty, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode('utf-8'))
+        assert resp.status == 200 and body['code'] == 0, body
+    finally:
+        server.shutdown()
+
+
+def test_pc_data_endpoint():
+    """/sync/pc_data.json：课时包汇总 + 课时明细 + 收费记录 一次下发（v23.8）。"""
+    archive_dir = tempfile.mkdtemp(prefix='smty_pcdata_')
+    save_dir = tempfile.mkdtemp(prefix='smty_pcdata2_')
+    server, base = _make_server(archive_dir, save_dir)
+    try:
+        # 手机推 2 包 + 2 明细 → PC 汇总
+        data = _make_phone_backup(
+            [STUDENT], [LESSON, LESSON2], [dict(PACKAGE, total=20)])
+        req = urllib.request.Request(
+            base + '/upload', data=data, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        urllib.request.urlopen(req, timeout=30).read()
+
+        # PC 端录两笔收费
+        import fee_manager as fm
+        fm.add_payment(archive_dir, '同步测试学员', '2026-09-05', 800, 10, '微信', '一期')
+        fm.add_payment(archive_dir, '同步测试学员', '2026-09-06', 400, 5, '现金', '')
+
+        req2 = urllib.request.Request(base + '/sync/pc_data.json',
+                                      headers={'X-Sync-Token': 'test_token'})
+        with urllib.request.urlopen(req2, timeout=30) as resp:
+            payload = json.loads(resp.read().decode('utf-8'))
+        assert payload['code'] == 0, payload
+        assert payload['generatedAt'] > 0
+
+        # 课时包：总量 20（单包直接设置）
+        pkgs = payload['packages']
+        assert len(pkgs) == 1 and pkgs[0]['studentName'] == '同步测试学员'
+        assert pkgs[0]['totalLessons'] == 20 and pkgs[0]['usedLessons'] == 3
+
+        # 课时明细：2 条，日期为 ISO 字符串
+        lessons = payload['lessons']
+        assert len(lessons) == 2, lessons
+        dates = {l['date'] for l in lessons}
+        assert dates == {'2026-09-01', '2026-09-02'}, dates
+        assert all(l['studentName'] == '同步测试学员' for l in lessons)
+        assert {l['count'] for l in lessons} == {1, 2}
+
+        # 收费记录：2 笔，字段齐全
+        fees = payload['fees']
+        assert len(fees) == 2, fees
+        amounts = sorted(f['amount'] for f in fees)
+        assert amounts == [400.0, 800.0], amounts
+        f1 = next(f for f in fees if f['amount'] == 800.0)
+        assert f1['studentName'] == '同步测试学员' and f1['date'] == '2026-09-05'
+        assert f1['hours'] == 10.0 and f1['method'] == '微信' and f1['note'] == '一期'
+    finally:
+        server.shutdown()
+
+
 if __name__ == '__main__':
     import urllib.error
     fails = 0

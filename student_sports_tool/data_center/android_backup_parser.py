@@ -74,8 +74,8 @@ def _normalize_student(row: Dict[str, Any]) -> Dict[str, Any]:
         'gender': str(_pick(row, 'gender', 'sex', default='男')).strip() or '男',
         'school': str(_pick(row, 'school', default='')).strip(),
         'phone': str(_pick(row, 'phone', 'mobile', 'contact', default='')).strip(),
-        'height': _pick(row, 'height', 'latest_height', default=None),
-        'weight': _pick(row, 'weight', 'latest_weight', default=None),
+        'height': _pick(row, 'height', 'latest_height', 'heightCm', default=None),
+        'weight': _pick(row, 'weight', 'latest_weight', 'weightKg', default=None),
         'grade': str(_pick(row, 'grade', 'grade_label', default='')).strip(),
         'note': str(_pick(row, 'note', 'remark', default='')).strip(),
         # 遗传与生活习惯字段（对齐 Android Student 实体 v17，身高预测用）
@@ -111,6 +111,8 @@ def _normalize_package(row: Dict[str, Any]) -> Dict[str, Any]:
         'remaining': int(_pick(row, 'remaining_lessons', 'remaining', default=0) or 0),
         'purchase_date': str(_pick(row, 'purchase_date', 'purchaseDate', default='')).strip(),
         'expire_date': str(_pick(row, 'expire_date', 'expireDate', default='')).strip(),
+        # 状态（活跃/已用完/已过期/已退费）：已退费包不计入 PC 已购总课时
+        'status': str(_pick(row, 'status', default='活跃') or '活跃').strip(),
     }
 
 

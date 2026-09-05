@@ -43,6 +43,13 @@ _merge_lock = threading.Lock()
 _device_lock = threading.Lock()
 
 
+def _to_int(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def ensure_tool_paths(tool_root: str = ''):
     """确保桌面端各扁平导入路径可用（主程序已注入时幂等）。"""
     root = tool_root or _PARENT
@@ -79,6 +86,8 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
             self._handle_export_students()
         elif path == '/sync/packages.json':
             self._handle_export_packages()
+        elif path == '/sync/pc_data.json':
+            self._handle_export_pc_data()
         elif path == '/sync/version':
             self._handle_sync_version()
         else:
@@ -179,6 +188,18 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
                       level='ERROR')
             return False, '安全校验拒绝：%s' % reason, 0
 
+        # v23.8 安全锁：零内容备份不得合并进非空档案目录（防手机端清库后反复推空备份）
+        try:
+            from backup_validator import reject_wiped_backup
+            ok, reason = reject_wiped_backup(zip_path, self.archive_dir)
+        except Exception as e:
+            ok, reason = True, ''
+            self._log('安全锁检查异常（放行）：%s' % e, level='WARN')
+        if not ok:
+            self._log('安全锁拒绝：%s（%s）' % (os.path.basename(zip_path), reason),
+                      level='ERROR')
+            return False, reason, 0
+
         def on_progress(msg: str):
             self._log('  [合并] %s' % msg)
 
@@ -269,6 +290,72 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         ]
         self._send_json(200, {'code': 0, 'packages': packages})
         self._log('课时包已下发：%d 名学员' % len(packages))
+
+    # === PC 数据总包下发（PC→手机，v23.8 新增） ===
+    def _handle_export_pc_data(self):
+        """GET /sync/pc_data.json：课时包汇总 + 课时明细 + 收费记录 一次下发。
+
+        手机端拉取后做三件事（对账语义见 双端同步协议.md）：
+        1. 课时包总量对账（单调不减，PC 空数据不动手机现值）
+        2. PC 消课差值对账（PC 独录的消课折算进手机课时包已用）
+        3. 收费记录镜像入库（只读展示，PC 为唯一权威源，删除不传播）
+        旧端点 /sync/packages.json 保留给旧版手机。
+        """
+        if not self._check_token():
+            return
+        if not self.archive_dir:
+            self._send_json(400, {'code': 1, 'message': 'archive-dir not configured'})
+            return
+        ensure_tool_paths()
+        try:
+            from lesson_manager import get_summary, get_detail, _norm_date as lm_norm_date
+            from fee_manager import get_payments
+            summaries = get_summary(self.archive_dir)
+            details = get_detail(self.archive_dir)
+            payments = get_payments(self.archive_dir)
+        except Exception as e:
+            self._log('PC 数据导出失败：%s' % e, level='ERROR')
+            self._send_json(500, {'code': 1, 'message': 'export failed: %s' % e})
+            return
+        packages = [
+            {
+                'studentName': s['name'],
+                'totalLessons': int(s.get('total') or 0),
+                'usedLessons': int(s.get('attended') or 0),
+            }
+            for s in summaries
+        ]
+        # 课时明细：日期归一化为 ISO 字符串（PC 单元格可能是 datetime）
+        lessons = []
+        for rec in details:
+            d = lm_norm_date(rec.get('date'))
+            lessons.append({
+                'studentName': rec.get('name'),
+                'date': d.isoformat() if d else str(rec.get('date') or ''),
+                'count': _to_int(rec.get('count')),
+                'content': str(rec.get('content') or ''),
+                'note': str(rec.get('note') or ''),
+            })
+        fees = [
+            {
+                'studentName': p['name'],
+                'date': p['date'],
+                'amount': float(p.get('amount') or 0),
+                'hours': float(p.get('hours') or 0),
+                'method': str(p.get('method') or ''),
+                'note': str(p.get('note') or ''),
+            }
+            for p in payments
+        ]
+        self._send_json(200, {
+            'code': 0,
+            'generatedAt': int(time.time() * 1000),
+            'packages': packages,
+            'lessons': lessons,
+            'fees': fees,
+        })
+        self._log('PC 数据总包已下发：%d 学员 / %d 课时明细 / %d 收费记录'
+                  % (len(packages), len(lessons), len(fees)))
 
     # === 设备发现回执（手机 → PC：登记设备指纹，供信任管理） ===
     def _handle_device_hello(self):
