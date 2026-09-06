@@ -354,8 +354,18 @@ class FinancePage(QWidget):
         if dlg.exec() != QDialog.Accepted or not dlg.result_data:
             return
         d = dlg.result_data
-        fm.add_payment(self._dir_path, d['name'], d['date'],
-                       d['amount'], d['hours'], d['method'], d['note'])
+        # 2026-09-06 修复：add_payment 对金额/课时数<=0 静默拒绝（返回 False），
+        # 此前忽略返回值导致教练以为已入账、记录实际未保存（"收费记录没了"事故）。
+        ok = fm.add_payment(self._dir_path, d['name'], d['date'],
+                            d['amount'], d['hours'], d['method'], d['note'])
+        if not ok:
+            from modern_dialog import ModernDialog
+            ModernDialog(
+                self, title='保存失败',
+                text='收费记录未保存：学员、金额、课时数均为必填，且金额和课时数必须大于 0。',
+                kind='warning').exec()
+            self.refresh()
+            return
         self.refresh()
 
     def on_del_payment(self, row_num):

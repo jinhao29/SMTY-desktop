@@ -65,7 +65,8 @@ DETAIL_HEADERS = ['序号', '日期', '学员', '课时数', '训练内容', '�
 SUMMARY_HEADERS = ['学员', '总课时', '已上课时', '剩余课时', '最近上课', '备注']
 
 # 非学员数据文件：文件名会被 sync_students 误认为学员名，需排除并清理历史遗留
-_NON_STUDENT_FILES = {'学员档案.xlsx', '教练档案.xlsx'}
+# （2026-09-06 事故：收费记录.xlsx 落在档案目录后被当成学员「收费记录」双向同步污染两端）
+_NON_STUDENT_FILES = {'学员档案.xlsx', '教练档案.xlsx', '课时记录.xlsx', '收费记录.xlsx'}
 
 
 def _lesson_file_path(dir_path):

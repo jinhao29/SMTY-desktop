@@ -57,7 +57,8 @@ def _calc_status(remaining, total):
 
 
 # 主数据文件（非学员档案）：扫描目录时排除，防止「学员档案/教练档案」被当成学员
-_NON_STUDENT_FILES = {'课时记录.xlsx', '学员档案.xlsx', '教练档案.xlsx'}
+# （2026-09-06 事故：收费记录.xlsx 被当成学员「收费记录」双向同步污染两端）
+_NON_STUDENT_FILES = {'课时记录.xlsx', '学员档案.xlsx', '教练档案.xlsx', '收费记录.xlsx'}
 
 
 def collect_all_students(dir_path):
