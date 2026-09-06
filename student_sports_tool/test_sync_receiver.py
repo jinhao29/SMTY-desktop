@@ -482,6 +482,63 @@ def test_pc_data_endpoint():
         server.shutdown()
 
 
+# 真机 BackupManager 实际导出格式（驼峰键）——2026-09-06 事故：归一化只认蛇形键，
+# 真机备份的课时明细/课时包在 PC 端整包被丢，PC 总课时/手机已消永不更新
+CAMEL_STUDENT = {'name': '真机格式学员', 'age': 9, 'gender': '男', 'school': '测试二小',
+                 'phone': '13800000000', 'heightCm': 133, 'weightKg': 30, 'grade': '三年级'}
+CAMEL_LESSON = {'id': 'l1', 'date': '2026-09-03', 'time': '10:00',
+                'studentName': '真机格式学员', 'content': '[]', 'summary': '真机明细',
+                'duration': 60, 'coach': '王教练'}
+CAMEL_PACKAGES = [
+    {'id': 'p1', 'studentName': '真机格式学员', 'name': '10次卡',
+     'totalLessons': 10, 'usedLessons': 4, 'price': 500,
+     'purchaseDate': '2026-08-01', 'expireDate': '', 'status': '活跃'},
+    {'id': 'p2', 'studentName': '真机格式学员', 'name': '5次卡',
+     'totalLessons': 5, 'usedLessons': 5, 'price': 300,
+     'purchaseDate': '2026-08-20', 'expireDate': '', 'status': '已用完'},
+]
+
+
+def test_real_camelcase_backup_merge():
+    """真机驼峰键备份：课时明细/课时包/手机已消 全部正确落库。"""
+    archive_dir = tempfile.mkdtemp(prefix='smty_camel_')
+    save_dir = tempfile.mkdtemp(prefix='smty_camel2_')
+    server, base = _make_server(archive_dir, save_dir)
+    try:
+        data = _make_phone_backup([CAMEL_STUDENT], [CAMEL_LESSON], CAMEL_PACKAGES)
+        req = urllib.request.Request(
+            base + '/upload', data=data, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode('utf-8'))
+        assert body['code'] == 0 and body['restored'] >= 1, body
+
+        import lesson_manager as lm
+        # 课时明细：驼峰 studentName/summary 正确映射
+        details = lm.get_detail(archive_dir, '真机格式学员')
+        assert len(details) == 1, details
+        assert details[0]['note'] == '真机明细'
+
+        # 课时包总量：Σ 未退费包 = 10 + 5 = 15（旧实现因键名断层恒为 0）
+        summary = {x['name']: x for x in lm.get_summary(archive_dir)}['真机格式学员']
+        assert summary['total'] == 15, summary
+        assert summary['attended'] == 5, summary   # max(明细1, 手机已消5)
+        assert summary['remaining'] == 10, summary
+
+        # 手机已消列落库
+        from openpyxl import load_workbook
+        wb = load_workbook(os.path.join(archive_dir, '课时记录.xlsx'))
+        ws = wb['汇总']
+        for r in range(2, ws.max_row + 1):
+            if str(ws.cell(row=r, column=1).value or '').strip() == '真机格式学员':
+                assert ws.cell(row=r, column=7).value == 5
+                break
+        else:
+            assert False, '汇总表未找到真机格式学员'
+    finally:
+        server.shutdown()
+
+
 if __name__ == '__main__':
     import urllib.error
     fails = 0

@@ -93,22 +93,27 @@ def _normalize_student(row: Dict[str, Any]) -> Dict[str, Any]:
 def _normalize_lesson(row: Dict[str, Any]) -> Dict[str, Any]:
     """归一化 lessons 表的一行为桌面端课时明细结构。"""
     return {
-        'student_name': str(_pick(row, 'student_name', 'name', default='')).strip(),
+        # 2026-09-06：BackupManager 实际导出为驼峰键（studentName/summary）——
+        # 此前只认蛇形键，真机备份的课时明细在 PC 端整包被丢（测试夹具用蛇形键未暴露）
+        'student_name': str(_pick(row, 'student_name', 'studentName', 'name', default='')).strip(),
         'date': str(_pick(row, 'date', 'lesson_date', 'check_in_date', default='')).strip(),
         'count': int(_pick(row, 'count', 'lesson_count', 'hours', default=1) or 1),
         'content': str(_pick(row, 'content', 'training_content', default='')).strip(),
-        'note': str(_pick(row, 'note', 'remark', default='')).strip(),
-        'coach': str(_pick(row, 'coach_name', 'coach', default='')).strip(),
+        'note': str(_pick(row, 'note', 'remark', 'summary', default='')).strip(),
+        'coach': str(_pick(row, 'coach_name', 'coachName', 'coach', default='')).strip(),
     }
 
 
 def _normalize_package(row: Dict[str, Any]) -> Dict[str, Any]:
     """归一化 lesson_packages 表的一行为课时包结构。"""
     return {
-        'student_name': str(_pick(row, 'student_name', 'name', default='')).strip(),
-        'total': int(_pick(row, 'total_lessons', 'total', 'purchased_lessons', default=0) or 0),
-        'attended': int(_pick(row, 'attended_lessons', 'used_lessons', 'attended', default=0) or 0),
-        'remaining': int(_pick(row, 'remaining_lessons', 'remaining', default=0) or 0),
+        # 2026-09-06：补驼峰键回退——真机 BackupManager 导出 studentName/totalLessons/
+        # usedLessons/purchaseDate/expireDate，此前只认蛇形键导致真机课时包整包被丢
+        # （PC 总课时从不随手机购买更新、手机已消列永不写入的根源）
+        'student_name': str(_pick(row, 'student_name', 'studentName', 'name', default='')).strip(),
+        'total': int(_pick(row, 'total_lessons', 'total', 'purchased_lessons', 'totalLessons', default=0) or 0),
+        'attended': int(_pick(row, 'attended_lessons', 'used_lessons', 'attended', 'usedLessons', default=0) or 0),
+        'remaining': int(_pick(row, 'remaining_lessons', 'remaining', 'remainingLessons', default=0) or 0),
         'purchase_date': str(_pick(row, 'purchase_date', 'purchaseDate', default='')).strip(),
         'expire_date': str(_pick(row, 'expire_date', 'expireDate', default='')).strip(),
         # 状态（活跃/已用完/已过期/已退费）：已退费包不计入 PC 已购总课时
