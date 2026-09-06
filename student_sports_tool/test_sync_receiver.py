@@ -491,10 +491,10 @@ CAMEL_LESSON = {'id': 'l1', 'date': '2026-09-03', 'time': '10:00',
                 'duration': 60, 'coach': '王教练'}
 CAMEL_PACKAGES = [
     {'id': 'p1', 'studentName': '真机格式学员', 'name': '10次卡',
-     'totalLessons': 10, 'usedLessons': 4, 'price': 500,
+     'totalLessons': 10, 'usedLessons': 4, 'price': 500, 'paidAmount': 480,
      'purchaseDate': '2026-08-01', 'expireDate': '', 'status': '活跃'},
     {'id': 'p2', 'studentName': '真机格式学员', 'name': '5次卡',
-     'totalLessons': 5, 'usedLessons': 5, 'price': 300,
+     'totalLessons': 5, 'usedLessons': 5, 'price': 300, 'paidAmount': 300,
      'purchaseDate': '2026-08-20', 'expireDate': '', 'status': '已用完'},
 ]
 
@@ -535,6 +535,21 @@ def test_real_camelcase_backup_merge():
                 break
         else:
             assert False, '汇总表未找到真机格式学员'
+
+        # 收费镜像：paidAmount 优先，两包两行；重复推送不放大
+        import fee_manager as fm
+        fees = fm.get_payments(archive_dir, '真机格式学员')
+        assert len(fees) == 2, fees
+        amounts = sorted(f['amount'] for f in fees)
+        assert amounts == [300.0, 480.0], amounts
+        assert all(f['method'] == '手机端' for f in fees)
+        assert all('手机端课时包' in f['note'] for f in fees)
+        # 同一备份再推一次：幂等
+        req2 = urllib.request.Request(
+            base + '/upload', data=data, method='POST',
+            headers={'X-Sync-Token': 'test_token'})
+        urllib.request.urlopen(req2, timeout=30).read()
+        assert len(fm.get_payments(archive_dir, '真机格式学员')) == 2
     finally:
         server.shutdown()
 

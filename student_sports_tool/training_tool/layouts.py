@@ -233,19 +233,19 @@ class RightActionPanel(Card):
 
         lay.addSpacing(4)
 
-        self.btn_open = QPushButton('📁  打开文件夹')
+        self.btn_open = QPushButton('打开文件夹')
         self.btn_open.setObjectName('secondary')
         self.btn_open.setCursor(Qt.PointingHandCursor)
         self.btn_open.setMinimumHeight(36)
         lay.addWidget(self.btn_open)
 
-        self.btn_template = QPushButton('📋  模板库')
+        self.btn_template = QPushButton('模板库')
         self.btn_template.setObjectName('secondary')
         self.btn_template.setCursor(Qt.PointingHandCursor)
         self.btn_template.setMinimumHeight(36)
         lay.addWidget(self.btn_template)
 
-        self.btn_send_phone = QPushButton('📱  截图发到手机')
+        self.btn_send_phone = QPushButton('截图发到手机')
         self.btn_send_phone.setObjectName('secondary')
         self.btn_send_phone.setCursor(Qt.PointingHandCursor)
         self.btn_send_phone.setMinimumHeight(36)

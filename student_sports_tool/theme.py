@@ -93,14 +93,8 @@ QComboBox::drop-down {
     border: none;
     width: 26px;
 }
-QComboBox::down-arrow {
-    image: none;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 7px solid #6B6B6B;
-    margin-right: 8px;
-}
-QComboBox:hover::down-arrow { border-top-color: #FF6B47; }
+/* down-arrow 不再自定义：border-triangle 技巧在部分 Qt 版本渲染为实心小方块，
+   原生箭头完整清晰（2026-09-06 修复下拉框图案残缺） */
 QComboBox QAbstractItemView {
     background: #FFFFFF;
     border: 1px solid #E5E5E5;
@@ -142,14 +136,8 @@ QDateEdit::drop-down {
     border: none;
     width: 26px;
 }
-QDateEdit::down-arrow {
-    image: none;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 7px solid #6B6B6B;
-    margin-right: 8px;
-}
-QDateEdit:hover::down-arrow { border-top-color: #FF6B47; }
+/* QDateEdit::down-arrow 同上：交还原生箭头 */
+
 
 /* ---------- 日历弹窗（QDateEdit calendarPopup）全面主题化 ---------- */
 QCalendarWidget QWidget {

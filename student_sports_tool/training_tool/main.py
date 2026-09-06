@@ -329,7 +329,7 @@ class MainWindow(QMainWindow):
 
     def _on_lan_plan_success(self, message: str):
         self.btn_send_to_phone.setEnabled(True)
-        self.btn_send_to_phone.setText('📱  截图发到手机')
+        self.btn_send_to_phone.setText('截图发到手机')
         self.status_bar.set_status('截图已发送到手机')
         dialog.info(
             self, '截图已发送到手机',
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
 
     def _on_lan_plan_failed(self, message: str):
         self.btn_send_to_phone.setEnabled(True)
-        self.btn_send_to_phone.setText('📱  截图发到手机')
+        self.btn_send_to_phone.setText('截图发到手机')
         self.status_bar.set_status('截图发送失败')
         dialog.warn(self, '截图发送失败', message)
 

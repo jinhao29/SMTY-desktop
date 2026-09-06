@@ -111,9 +111,13 @@ def _normalize_package(row: Dict[str, Any]) -> Dict[str, Any]:
         # usedLessons/purchaseDate/expireDate，此前只认蛇形键导致真机课时包整包被丢
         # （PC 总课时从不随手机购买更新、手机已消列永不写入的根源）
         'student_name': str(_pick(row, 'student_name', 'studentName', 'name', default='')).strip(),
+        # 课时包名称（幂等收费镜像的备注键；与 student_name 的回退顺序区分开）
+        'pkg_name': str(_pick(row, 'pkg_name', 'package_name', 'name', default='')).strip(),
         'total': int(_pick(row, 'total_lessons', 'total', 'purchased_lessons', 'totalLessons', default=0) or 0),
         'attended': int(_pick(row, 'attended_lessons', 'used_lessons', 'attended', 'usedLessons', default=0) or 0),
         'remaining': int(_pick(row, 'remaining_lessons', 'remaining', 'remainingLessons', default=0) or 0),
+        'price': float(_pick(row, 'price', 'package_price', default=0) or 0),
+        'paid_amount': float(_pick(row, 'paid_amount', 'paidAmount', default=-1)),
         'purchase_date': str(_pick(row, 'purchase_date', 'purchaseDate', default='')).strip(),
         'expire_date': str(_pick(row, 'expire_date', 'expireDate', default='')).strip(),
         # 状态（活跃/已用完/已过期/已退费）：已退费包不计入 PC 已购总课时

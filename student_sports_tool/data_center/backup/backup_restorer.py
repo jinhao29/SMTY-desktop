@@ -267,6 +267,7 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
     # 覆盖成新包值（应购 30 只剩 20）——双端课时包不统一的根源之一。
     pkg_totals = {}
     pkg_attended = {}
+    pkg_rows = {}
     for pkg in packages:
         name = pkg.get('student_name', '').strip()
         if not name:
@@ -278,6 +279,7 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
         att = _to_int(pkg.get('attended'))
         if att > pkg_attended.get(name, 0):
             pkg_attended[name] = att
+        pkg_rows.setdefault(name, []).append(pkg)
 
     # === 幂等合并（v23.6 修复）：手机备份是全量快照，自动同步会反复推送同一批
     # 课时；add_lesson 无去重，二次推送曾导致 PC 明细/已上课时翻倍放大。
@@ -404,6 +406,40 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                     lesson_manager.set_phone_used(
                         target_dir, effective_name, pkg_attended[name]
                     )
+
+                # v23.9.2：手机课时包付费 → PC 收费记录镜像（收费数据互通）
+                # 幂等键：备注「手机端课时包：{包名}」——同包重复推送不放大；
+                # 教练在 PC 手工补录的同笔收费需自行核对（备注无标记，会各自成行）
+                phone_pkgs = pkg_rows.get(name) or []
+                if phone_pkgs:
+                    try:
+                        import fee_manager
+                        existing_notes = {
+                            r['note'] for r in
+                            fee_manager.get_payments(target_dir, effective_name)
+                        }
+                        for pk in phone_pkgs:
+                            paid = float(pk.get('paid_amount') or -1)
+                            if paid < 0:
+                                paid = float(pk.get('price') or 0)
+                            hours = _to_int(pk.get('total'))
+                            note = '手机端课时包：{}'.format(pk.get('pkg_name') or '未命名')
+                            if paid <= 0 or hours <= 0:
+                                continue
+                            if note in existing_notes:
+                                continue
+                            fee_manager.add_payment(
+                                target_dir, effective_name,
+                                pk.get('purchase_date') or
+                                datetime.now().strftime('%Y-%m-%d'),
+                                paid, hours, '手机端', note,
+                            )
+                            existing_notes.add(note)
+                            if progress_cb:
+                                progress_cb('已镜像手机收费：{} {}（{}）'.format(
+                                    effective_name, paid, note))
+                    except (FileNotFoundError, PermissionError, ValueError) as e:
+                        logging.error(f'收费镜像失败 [{effective_name}]：{e}', exc_info=True)
             except (FileNotFoundError, PermissionError) as e:
                 logging.error(f'同步课时包失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)
 
