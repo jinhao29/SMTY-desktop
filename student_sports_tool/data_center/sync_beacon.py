@@ -130,7 +130,8 @@ def notify_data_changed(version: int = 0):
 
     手机端 UdpDesktopDiscoveryService 收到后自动触发一次双向同步，
     实现「PC 改完手机自动跟上」。合并引入的变更不广播（调用方为本地编辑路径）。
-    version 传档案目录数据版本（sync_server /sync/version 同源），手机端据此去重。
+    version 为信息性字段（档案目录数据版本，/sync/version 同源）——手机端当前
+    仅做事件触发 + 防抖，未做版本去重；连续变更由 PC 端 5s 节流 + 手机端防抖合并。
     """
     global _last_notify_ts
     import time as _t
