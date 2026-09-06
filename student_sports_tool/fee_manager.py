@@ -133,6 +133,11 @@ def add_payment(dir_path, name, date, amount, hours, method='', note=''):
         ws.cell(row=target_row, column=c, value=v)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    try:
+        from data_center.sync_beacon import notify_data_changed
+        notify_data_changed()
+    except Exception:
+        pass
     return True
 
 
@@ -148,6 +153,11 @@ def delete_payment(dir_path, row_num):
         ws.cell(row=r, column=1, value=r - 1)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    try:
+        from data_center.sync_beacon import notify_data_changed
+        notify_data_changed()
+    except Exception:
+        pass
     return True
 
 
