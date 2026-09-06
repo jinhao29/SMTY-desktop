@@ -86,7 +86,7 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
 
         self.btn_refresh = QPushButton('刷新')
         self.btn_refresh.setObjectName('secondary')
-        self.btn_refresh.clicked.connect(self.refresh)
+        self.btn_refresh.clicked.connect(self._on_refresh_clicked)
         toolbar.addWidget(self.btn_refresh)
 
         self.btn_add = QPushButton('+ 新增学员')
@@ -179,6 +179,21 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         lay.addWidget(footer)
 
     #==== 数据刷新 ====
+
+    def _on_refresh_clicked(self):
+        """刷新按钮：带加载反馈（禁用 + 文案变化），顺带执行明细去重修复。"""
+        self.btn_refresh.setEnabled(False)
+        self.btn_refresh.setText('刷新中…')
+        try:
+            try:
+                import lesson_manager as lm
+                lm.dedup_details(self._get_dir())
+            except Exception:
+                pass  # 去重失败不阻塞刷新
+            self.refresh()
+        finally:
+            self.btn_refresh.setEnabled(True)
+            self.btn_refresh.setText('刷新')
 
     def refresh(self):
         """从存储刷新表格数据（全量含停用，显示层由 chips 过滤）。"""

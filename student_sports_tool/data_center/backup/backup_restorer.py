@@ -110,6 +110,13 @@ def do_restore(zip_path, target_dir, progress_cb=None, conflict_resolutions=None
         if progress_cb:
             progress_cb(f'SQLite 索引重建跳过：{e}')
 
+    # v23.9.2：合并后明细去重（键名漂移遗留的重复行一次性清理）
+    try:
+        import lesson_manager as _lm
+        removed = _lm.dedup_details(target_dir, progress_cb=progress_cb)
+    except (FileNotFoundError, PermissionError) as e:
+        logging.error(f'明细去重失败：{e}', exc_info=True)
+
     # === v4 新增：恢复成功后立即触发一次自动备份 ===
     # 防止恢复后的数据再次丢失，备份恢复后的最新状态到 AutoBackups/
     # 静默执行：失败仅记录日志，不影响恢复流程
@@ -375,8 +382,7 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 les_count = int(les.get('count') or 1)
                 les_content = les.get('content') or ''
                 les_note = les.get('note') or ''
-                key = (effective_name, str(les_date), les_count,
-                       str(les_content), str(les_note))
+                key = (effective_name, str(les_date), les_count)
                 if key in existing_lesson_keys:
                     continue
                 lesson_manager.add_lesson(
@@ -457,12 +463,13 @@ def _existing_lesson_keys(target_dir: str) -> set:
         import lesson_manager as _lm
         for rec in _lm.get_detail(target_dir):
             d = _lm._norm_date(rec.get('date'))
+            # v23.9.2：幂等键降级为（学员,日期,节数）——content/note 曾因版本键名
+            # 漂移（note=''/summary）导致同批课时重复导入翻倍；手机端一天一签，
+            # 同日同节数视为同一条。content/note 仍保留在既有行上供展示。
             keys.add((
                 rec.get('name'),
                 d.isoformat() if d else str(rec.get('date') or ''),
                 _to_int(rec.get('count')),
-                str(rec.get('content') or ''),
-                str(rec.get('note') or ''),
             ))
     except Exception:
         logging.exception('收集已有课时幂等键失败（退化为不去重）')

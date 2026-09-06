@@ -284,7 +284,8 @@ def get_summary(dir_path, use_phone_used=True):
             'name': name,
             'total': total,
             'attended': attended,
-            'remaining': total - attended,
+            # 与手机端口径一致：剩余不为负（手机端 remainingLessons 同样钳 0）
+            'remaining': max(0, total - attended),
             'last_date': _calc_last_date(records, name),
             'note': old_map.get(name, {}).get('note', ''),
         })
@@ -368,6 +369,45 @@ def set_remaining_lessons(dir_path, name, remaining):
     return True
 
 
+def dedup_details(dir_path, progress_cb=None):
+    """明细去重（v23.9.2 数据修复）：同（学员,日期,节数）保留最新一条。
+
+    背景：同步键名漂移（旧版导出 note=''/新版 summary）曾使同一批手机课时
+    在版本切换后被重复导入（55 组重复，明细翻倍），已上虚高、剩余为负。
+    幂等键已同步降级为（学员,日期,节数）防复发，本函数用于清理既有重复。
+    返回删除的行数。
+    """
+    from collections import OrderedDict
+    fpath = _ensure_file(dir_path)
+    wb = _load_wb(fpath)
+    records = _read_detail(wb)
+    groups = OrderedDict()
+    for rec in records:
+        d = _norm_date(rec.get('date'))
+        key = (rec.get('name'), d.isoformat() if d else str(rec.get('date') or ''),
+               _to_int(rec.get('count')))
+        groups.setdefault(key, []).append(rec)
+    rows_to_delete = []
+    for key, group in groups.items():
+        if len(group) > 1:
+            rows_to_delete.extend(g['row'] for g in group[:-1])  # 保留最新
+    if not rows_to_delete:
+        return 0
+    ws = wb['明细']
+    for row in sorted(rows_to_delete, reverse=True):
+        ws.delete_rows(row)
+    for r in range(2, ws.max_row + 1):
+        ws.cell(row=r, column=1, value=r - 1)
+    records = _read_detail(wb)
+    _rebuild_summary(wb, records)
+    _save_wb(fpath, wb)
+    _invalidate_meta_index(dir_path)
+    _notify_data_changed()
+    if progress_cb:
+        progress_cb(f'明细去重完成：删除 {len(rows_to_delete)} 条重复记录')
+    return len(rows_to_delete)
+
+
 def set_phone_used(dir_path, name, used):
     """写入学员的「手机已消」课时数（手机备份合并时调用，v23.9 双端口径统一）。
 
@@ -424,7 +464,7 @@ def get_lesson_summary(dir_path, name):
         'name': name,
         'total': total,
         'attended': attended,
-        'remaining': total - attended,
+        'remaining': max(0, total - attended),
         'last_date': _calc_last_date(records, name),
         'note': old_map.get(name, {}).get('note', ''),
     }
