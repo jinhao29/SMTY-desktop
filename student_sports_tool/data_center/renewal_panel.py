@@ -191,7 +191,7 @@ class RenewalPanel(QWidget):
     def _set_row(self, table, row, values, bg=None, fg=None, highlight_col=None):
         """填充一行数据并设置配色。"""
         for col, val in enumerate(values):
-            item = QTableWidgetItem(val)
+            item = QTableWidgetItem(val if isinstance(val, str) else str(val))
             item.setTextAlignment(Qt.AlignCenter)
             if bg:
                 item.setBackground(QColor(bg))

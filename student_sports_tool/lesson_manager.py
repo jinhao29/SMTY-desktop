@@ -280,13 +280,15 @@ def get_summary(dir_path, use_phone_used=True):
         detail_attended = _calc_attended(records, name)
         phone_used = _to_int(old_map.get(name, {}).get('phone_used'))
         attended = max(detail_attended, phone_used) if use_phone_used else detail_attended
+        last = _calc_last_date(records, name)
         result.append({
             'name': name,
             'total': total,
             'attended': attended,
             # 与手机端口径一致：剩余不为负（手机端 remainingLessons 同样钳 0）
             'remaining': max(0, total - attended),
-            'last_date': _calc_last_date(records, name),
+            # ISO 字符串（调用方直接进 QTableWidgetItem，date 对象会 TypeError）
+            'last_date': last.strftime('%Y-%m-%d') if last else '',
             'note': old_map.get(name, {}).get('note', ''),
         })
     return result
@@ -460,12 +462,13 @@ def get_lesson_summary(dir_path, name):
     total = old_map.get(name, {}).get('total', 0)
     phone_used = _to_int(old_map.get(name, {}).get('phone_used'))
     attended = max(_calc_attended(records, name), phone_used)
+    last = _calc_last_date(records, name)
     return {
         'name': name,
         'total': total,
         'attended': attended,
         'remaining': max(0, total - attended),
-        'last_date': _calc_last_date(records, name),
+        'last_date': last.strftime('%Y-%m-%d') if last else '',
         'note': old_map.get(name, {}).get('note', ''),
     }
 
