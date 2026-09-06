@@ -282,10 +282,8 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
         if pkg.get('status') == '已退费':
             continue
         pkg_totals[name] = pkg_totals.get(name, 0) + _to_int(pkg.get('total'))
-        # 手机端已消课时（含无课时记录的纯扣课），取该学员多包最大值
-        att = _to_int(pkg.get('attended'))
-        if att > pkg_attended.get(name, 0):
-            pkg_attended[name] = att
+        # 手机端已消课时 = Σ 未退费包 used（与手机端「已消」显示口径一致）
+        pkg_attended[name] = pkg_attended.get(name, 0) + _to_int(pkg.get('attended'))
         pkg_rows.setdefault(name, []).append(pkg)
 
     # === 幂等合并（v23.6 修复）：手机备份是全量快照，自动同步会反复推送同一批
@@ -407,11 +405,11 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                     lesson_manager.set_total_lessons(
                         target_dir, effective_name, phone_total
                     )
-                # v23.9：手机已消课时写入 PC「手机已消」列，剩余口径两端一致
-                if pkg_attended.get(name, 0) > 0:
-                    lesson_manager.set_phone_used(
-                        target_dir, effective_name, pkg_attended[name]
-                    )
+                # v23.9.2：手机已消课时镜像（覆盖式）——手机备份是全量快照，
+                # 手机删包/改包后 PC 如实回落，剩余口径两端始终一致
+                lesson_manager.set_phone_used(
+                    target_dir, effective_name, pkg_attended.get(name, 0)
+                )
 
                 # v23.9.2：手机课时包付费 → PC 收费记录镜像（收费数据互通）
                 # 幂等键：备注「手机端课时包：{包名}」——同包重复推送不放大；

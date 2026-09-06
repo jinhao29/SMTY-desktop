@@ -522,8 +522,9 @@ def test_real_camelcase_backup_merge():
         # 课时包总量：Σ 未退费包 = 10 + 5 = 15（旧实现因键名断层恒为 0）
         summary = {x['name']: x for x in lm.get_summary(archive_dir)}['真机格式学员']
         assert summary['total'] == 15, summary
-        assert summary['attended'] == 5, summary   # max(明细1, 手机已消5)
-        assert summary['remaining'] == 10, summary
+        # 手机已消 = Σ 未退费包 used = 4 + 5 = 9（与手机端「已消」显示口径一致）
+        assert summary['attended'] == 9, summary
+        assert summary['remaining'] == 6, summary
 
         # 手机已消列落库
         from openpyxl import load_workbook
@@ -531,7 +532,7 @@ def test_real_camelcase_backup_merge():
         ws = wb['汇总']
         for r in range(2, ws.max_row + 1):
             if str(ws.cell(row=r, column=1).value or '').strip() == '真机格式学员':
-                assert ws.cell(row=r, column=7).value == 5
+                assert ws.cell(row=r, column=7).value == 9
                 break
         else:
             assert False, '汇总表未找到真机格式学员'
