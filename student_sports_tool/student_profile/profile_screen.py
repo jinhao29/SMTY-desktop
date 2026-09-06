@@ -127,7 +127,7 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         header.setSectionResizeMode(5, QHeaderView.Interactive)        # 体型（长文本）
         self.table.setColumnWidth(5, 105)
         header.setSectionResizeMode(6, QHeaderView.Stretch)            # 年级
-        header.setSectionResizeMode(10, QHeaderView.ResizeToContents)  # 状态徽章
+        header.setSectionResizeMode(10, QHeaderView.Stretch)           # 状态徽章（随窗口尺寸自适应）
         header.setSectionResizeMode(11, QHeaderView.ResizeToContents)  # 操作
         header.setStretchLastSection(False)
         # 12 列信息密度高：紧凑字号 + 收窄内边距（对齐参考图表头小字风格），
@@ -148,9 +148,11 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
                 ('编辑', self._on_action_edit),
                 ('课时', self._on_action_lesson),
                 ('停用', self._on_action_deactivate),
+                ('删除', self._on_action_delete),
             ],
             'inactive': [
                 ('恢复', self._on_action_reactivate),
+                ('删除', self._on_action_delete),
             ],
         }, self.table))
         lay.addWidget(self.table, 1)
@@ -276,6 +278,25 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
             self.refresh()
         except Exception as e:
             dialog.error(self, '停用失败', str(e))
+
+    def _on_action_delete(self, index):
+        """操作列「删除」按钮：硬删除学员（花名册/档案/课时/收费一并移除，档案隔离可找回）。"""
+        name = self._source_model.get_student_name_at(index.row())
+        if not name:
+            return
+        reply = dialog.confirm(
+            self, '确认删除',
+            f'确定永久删除学员 [{name}] 吗？
+'
+            '将同时删除其课时记录、收费记录与档案，删除后不可在软件内恢复！',
+        )
+        if not reply:
+            return
+        try:
+            pm.delete_student_permanently(self._get_dir(), name)
+            self.refresh()
+        except Exception as e:
+            dialog.error(self, '删除失败', str(e))
 
     def _on_action_reactivate(self, index):
         """操作列「恢复」按钮：恢复已停用学员。"""

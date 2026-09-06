@@ -52,6 +52,15 @@ def _invalidate_meta_index(dir_path: str = ''):
     except Exception:
         pass
 
+def _notify_data_changed():
+    """本地数据变更后广播（触发手机端自动拉取）；独立进程/模块缺失时静默跳过。"""
+    try:
+        from data_center.sync_beacon import notify_data_changed
+        notify_data_changed()
+    except Exception:
+        pass
+
+
 THIN = Side(style='thin', color='888888')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 CENTER = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -62,7 +71,7 @@ WARN_FILL = PatternFill(start_color='FCE4E4', end_color='FCE4E4', fill_type='sol
 TOTAL_FILL = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
 
 DETAIL_HEADERS = ['序号', '日期', '学员', '课时数', '训练内容', '备注']
-SUMMARY_HEADERS = ['学员', '总课时', '已上课时', '剩余课时', '最近上课', '备注']
+SUMMARY_HEADERS = ['学员', '总课时', '已上课时', '剩余课时', '最近上课', '备注', '手机已消']
 
 # 非学员数据文件：文件名会被 sync_students 误认为学员名，需排除并清理历史遗留
 # （2026-09-06 事故：收费记录.xlsx 落在档案目录后被当成学员「收费记录」双向同步污染两端）
@@ -126,6 +135,7 @@ def _ensure_file(dir_path):
     ws_s.column_dimensions['D'].width = 10
     ws_s.column_dimensions['E'].width = 12
     ws_s.column_dimensions['F'].width = 18
+    ws_s.column_dimensions['G'].width = 10
     ws_s.freeze_panes = 'A2'
     _save_wb(fpath, wb)
     return fpath
@@ -162,6 +172,7 @@ def _read_summary_map(wb):
         result[str(name).strip()] = {
             'total': ws.cell(row=r, column=2).value or 0,
             'note': ws.cell(row=r, column=6).value or '',
+            'phone_used': _to_int(ws.cell(row=r, column=7).value),
             'row': r,
         }
     return result
@@ -170,6 +181,14 @@ def _read_summary_map(wb):
 def _calc_attended(records, name):
     """从明细记录计算指定学员的已上课时总数。"""
     return sum(rec['count'] for rec in records if rec['name'] == name)
+
+
+def _to_int(v) -> int:
+    """宽松转 int（手机端同步来的值可能是字符串/浮点）。"""
+    try:
+        return int(float(v or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _norm_date(v):
@@ -242,8 +261,14 @@ def _rebuild_summary(wb, records):
                 cell.fill = TOTAL_FILL
 
 
-def get_summary(dir_path):
-    """读取所有学员的课时汇总，返回列表。每条：{name,total,attended,remaining,last_date,note}。"""
+def get_summary(dir_path, use_phone_used=True):
+    """读取所有学员的课时汇总，返回列表。每条：{name,total,attended,remaining,last_date,note}。
+
+    use_phone_used=True（默认，PC 显示/财务口径）：有效已上 = max(明细推导, 手机已消)，
+    与手机端剩余课时一致（手机端存在无课时记录的纯扣课）；
+    use_phone_used=False（双端同步导出口径）：仅用明细推导值，避免把 PC 显示值
+    回灌手机端造成已用重复折算。
+    """
     fpath = _ensure_file(dir_path)
     wb = _load_wb(fpath)
     records = _read_detail(wb)
@@ -252,7 +277,9 @@ def get_summary(dir_path):
     result = []
     for name in sorted(all_names):
         total = old_map.get(name, {}).get('total', 0)
-        attended = _calc_attended(records, name)
+        detail_attended = _calc_attended(records, name)
+        phone_used = _to_int(old_map.get(name, {}).get('phone_used'))
+        attended = max(detail_attended, phone_used) if use_phone_used else detail_attended
         result.append({
             'name': name,
             'total': total,
@@ -296,6 +323,7 @@ def set_total_lessons(dir_path, name, total):
     _rebuild_summary(wb, records)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    _notify_data_changed()
     return True
 
 
@@ -336,6 +364,45 @@ def set_remaining_lessons(dir_path, name, remaining):
     _rebuild_summary(wb, records)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    _notify_data_changed()
+    return True
+
+
+def set_phone_used(dir_path, name, used):
+    """写入学员的「手机已消」课时数（手机备份合并时调用，v23.9 双端口径统一）。
+
+    手机端存在无课时记录的纯扣课（直接编辑课时包已用），PC 明细无法体现，
+    以独立列记录，get_summary 取 max(明细推导, 手机已消) 保证两端剩余课时一致。
+    学员不存在于汇总表时新增一行（与 set_total_lessons 一致）。
+    """
+    used = _to_int(used)
+    if used < 0 or not name:
+        return False
+    fpath = _ensure_file(dir_path)
+    wb = _load_wb(fpath)
+    ws = wb['汇总']
+    # 幂等：值未变不写（手机合并每次全量推送，避免无意义写盘与变更广播回环）
+    for r in range(2, ws.max_row + 1):
+        if str(ws.cell(row=r, column=1).value or '').strip() == name:
+            if _to_int(ws.cell(row=r, column=7).value) == used:
+                return True
+            break
+    target_row = None
+    for r in range(2, ws.max_row + 1):
+        if str(ws.cell(row=r, column=1).value or '').strip() == name:
+            target_row = r
+            break
+    if target_row is None:
+        target_row = ws.max_row + 1 if ws.cell(row=ws.max_row, column=1).value else ws.max_row
+        if ws.cell(row=target_row, column=1).value:
+            target_row += 1
+        ws.cell(row=target_row, column=1, value=name)
+    ws.cell(row=target_row, column=7, value=used)
+    records = _read_detail(wb)
+    _rebuild_summary(wb, records)
+    _save_wb(fpath, wb)
+    _invalidate_meta_index(dir_path)
+    _notify_data_changed()
     return True
 
 
@@ -351,7 +418,8 @@ def get_lesson_summary(dir_path, name):
     if name not in old_map and not any(r['name'] == name for r in records):
         return None
     total = old_map.get(name, {}).get('total', 0)
-    attended = _calc_attended(records, name)
+    phone_used = _to_int(old_map.get(name, {}).get('phone_used'))
+    attended = max(_calc_attended(records, name), phone_used)
     return {
         'name': name,
         'total': total,
@@ -397,6 +465,7 @@ def add_lesson(dir_path, name, date, count, content='', note=''):
     _rebuild_summary(wb, records)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    _notify_data_changed()
     return next_seq
 
 
@@ -415,6 +484,7 @@ def delete_lesson(dir_path, row_num):
     _rebuild_summary(wb, records)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    _notify_data_changed()
     return True
 
 
@@ -452,6 +522,7 @@ def update_lesson(dir_path, row_num, date=None, count=None, content=None, note=N
     _rebuild_summary(wb, records)
     _save_wb(fpath, wb)
     _invalidate_meta_index(dir_path)
+    _notify_data_changed()
     return True
 
 

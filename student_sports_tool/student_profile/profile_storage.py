@@ -236,6 +236,30 @@ def read_all(dir_path: str) -> list:
     return with_retry(_do_read, max_retries=3, retry_interval=1.0)
 
 
+def remove_profile(dir_path: str, name: str) -> bool:
+    """硬删除：从花名册移除学员行与 _meta 条目（不动 per-student xlsx，由调用方隔离）。
+
+    返回 True 表示已删除；False 表示未找到。
+    """
+    fpath = ensure_file(dir_path)
+
+    def _do_remove():
+        with file_lock(fpath, timeout=5.0):
+            wb = load_workbook(fpath)
+            ws = wb[PROFILE_SHEET]
+            for r in range(2, ws.max_row + 1):
+                if str(ws.cell(row=r, column=1).value or '').strip() == name:
+                    ws.delete_rows(r)
+                    meta = _read_meta(wb)
+                    meta.get('students', {}).pop(name, None)
+                    _write_meta(wb, meta)
+                    atomic_save_workbook(wb, fpath)
+                    return True
+            return False
+
+    return with_retry(_do_remove, max_retries=3, retry_interval=1.0)
+
+
 def set_active_status(dir_path: str, name: str, is_active: bool) -> bool:
     """设置学员的停用/启用状态（软删除/恢复）。
 

@@ -355,9 +355,11 @@ class CoachScreen(QWidget):
             'active': [
                 ('编辑', self._on_action_edit),
                 ('离职', self._on_action_deactivate),
+                ('删除', self._on_action_delete),
             ],
             'inactive': [
                 ('恢复', self._on_action_reactivate),
+                ('删除', self._on_action_delete),
             ],
         }, self.table))
         lay.addWidget(self.table, 1)
@@ -485,6 +487,27 @@ class CoachScreen(QWidget):
             self.refresh()
         except Exception as e:
             dialog.error(self, '操作失败', str(e))
+
+    def _on_action_delete(self, index):
+        """操作列「删除」按钮：硬删除教练（确认后从教练档案移除）。"""
+        if index is None or not index.isValid():
+            return
+        coach = self._source_model.get_coach_at(index.row())
+        name = coach.get('name', '')
+        if not name:
+            return
+        reply = dialog.confirm(
+            self, '确认删除',
+            f'确定永久删除教练 [{name}] 吗？
+删除后不可恢复！',
+        )
+        if not reply:
+            return
+        try:
+            cm.delete_coach(self._get_dir(), name)
+            self.refresh()
+        except Exception as e:
+            dialog.error(self, '删除失败', str(e))
 
     def _on_action_reactivate(self, index):
         """操作列「恢复」按钮：离职教练恢复在职。"""

@@ -266,6 +266,7 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
     # 旧实现取最后一个包（dict 后写覆盖），学员在手机买了第二个包后 PC 总课时被
     # 覆盖成新包值（应购 30 只剩 20）——双端课时包不统一的根源之一。
     pkg_totals = {}
+    pkg_attended = {}
     for pkg in packages:
         name = pkg.get('student_name', '').strip()
         if not name:
@@ -273,6 +274,10 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
         if pkg.get('status') == '已退费':
             continue
         pkg_totals[name] = pkg_totals.get(name, 0) + _to_int(pkg.get('total'))
+        # 手机端已消课时（含无课时记录的纯扣课），取该学员多包最大值
+        att = _to_int(pkg.get('attended'))
+        if att > pkg_attended.get(name, 0):
+            pkg_attended[name] = att
 
     # === 幂等合并（v23.6 修复）：手机备份是全量快照，自动同步会反复推送同一批
     # 课时；add_lesson 无去重，二次推送曾导致 PC 明细/已上课时翻倍放大。
@@ -393,6 +398,11 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 if phone_total > pc_total:
                     lesson_manager.set_total_lessons(
                         target_dir, effective_name, phone_total
+                    )
+                # v23.9：手机已消课时写入 PC「手机已消」列，剩余口径两端一致
+                if pkg_attended.get(name, 0) > 0:
+                    lesson_manager.set_phone_used(
+                        target_dir, effective_name, pkg_attended[name]
                     )
             except (FileNotFoundError, PermissionError) as e:
                 logging.error(f'同步课时包失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)

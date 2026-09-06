@@ -119,3 +119,46 @@ class SyncBeacon:
         # 常见家庭/办公网段掩码：/24 为主，附带 /16 与最近邻子网覆盖
         candidates = {f'{a}.{b}.{c}.255', f'{a}.{b}.255.255', f'{a}.{b}.{int(c) + 1}.255'}
         return sorted(candidates)
+
+# ===== v23.9：PC 数据变更广播（触发手机端自动拉取） =====
+_last_notify_ts = 0.0
+_NOTIFY_DEBOUNCE = 5.0  # 秒：高频保存（批量编辑）时节流
+
+
+def notify_data_changed(version: int = 0):
+    """PC 端本地数据变更后向局域网广播 desktop_data_changed（幂等节流）。
+
+    手机端 UdpDesktopDiscoveryService 收到后自动触发一次双向同步，
+    实现「PC 改完手机自动跟上」。合并引入的变更不广播（调用方为本地编辑路径）。
+    version 传档案目录数据版本（sync_server /sync/version 同源），手机端据此去重。
+    """
+    global _last_notify_ts
+    import time as _t
+    now = _t.time()
+    if now - _last_notify_ts < _NOTIFY_DEBOUNCE:
+        return
+    _last_notify_ts = now
+    try:
+        local = local_ip()
+        payload = json.dumps({
+            'type': 'desktop_data_changed',
+            'host': local,
+            'timestamp': int(now * 1000),
+            'version': int(version or 0),
+        }).encode('utf-8')
+        targets = [('255.255.255.255', UDP_PORT)]
+        for ip in SyncBeacon._subnet_broadcasts(local):
+            if (ip, UDP_PORT) not in targets:
+                targets.append((ip, UDP_PORT))
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            for target in targets:
+                try:
+                    sock.sendto(payload, target)
+                except OSError:
+                    pass
+        finally:
+            sock.close()
+    except Exception:
+        logging.debug('数据变更广播失败', exc_info=True)

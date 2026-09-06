@@ -46,6 +46,15 @@ def grade_display_label(grade: str, age: int = 0) -> str:
     return grade_short_label(grade)
 
 
+def _notify_data_changed():
+    """本地档案变更后广播（触发手机端自动拉取）；独立环境静默跳过。"""
+    try:
+        from data_center.sync_beacon import notify_data_changed
+        notify_data_changed()
+    except Exception:
+        pass
+
+
 def list_students(archive_dir: str, include_inactive: bool = False) -> list:
     """获取完整学员列表（合并档案与课时记录）。
 
@@ -186,7 +195,73 @@ def delete_student(archive_dir: str, name: str) -> bool:
 
     与 Android 端软删除设计对齐，避免课时记录与档案断层。
     """
-    return _delete_profile(archive_dir, name)
+    ok = _delete_profile(archive_dir, name)
+    if ok:
+        _notify_data_changed()
+    return ok
+
+
+def delete_student_permanently(archive_dir: str, name: str) -> bool:
+    """硬删除学员（v23.9）：花名册行 + per-student xlsx + 课时明细/汇总 + 收费记录。
+
+    per-student xlsx 移入 {archive_dir}/_deleted_students/<时间戳>/ 隔离（可人工找回），
+    不直接物理删除。删除不存在时返回 False。
+    """
+    import shutil as _shutil
+    from datetime import datetime as _dt
+    import lesson_manager as lm
+    import fee_manager as fm
+    from profile_storage import remove_profile
+    if not name:
+        return False
+
+    # 1. 花名册行（先于文件隔离判断存在性）
+    removed = remove_profile(archive_dir, name)
+    if not removed:
+        return False
+
+    # 2. per-student xlsx 隔离
+    safe = name
+    for ch in r'\/:*?"<>|':
+        safe = safe.replace(ch, '_')
+    src = os.path.join(archive_dir, f'{safe}.xlsx')
+    if os.path.exists(src):
+        quarantine = os.path.join(archive_dir, '_deleted_students',
+                                  _dt.now().strftime('%Y%m%d_%H%M%S'))
+        os.makedirs(quarantine, exist_ok=True)
+        try:
+            _shutil.move(src, os.path.join(quarantine, f'{safe}.xlsx'))
+        except OSError:
+            pass
+
+    # 3. 课时明细与汇总行
+    try:
+        for rec in lm.get_detail(archive_dir, name):
+            lm.delete_lesson(archive_dir, rec['row'])
+        # 汇总行清除
+        from openpyxl import load_workbook as _lw
+        fpath = lm._lesson_file_path(archive_dir)
+        wb = lm._load_wb(fpath)
+        ws = wb['汇总']
+        for r in range(2, ws.max_row + 1):
+            if str(ws.cell(row=r, column=1).value or '').strip() == name:
+                for c in range(1, 8):
+                    ws.cell(row=r, column=c).value = None
+                break
+        lm._save_wb(fpath, wb)
+    except Exception:
+        pass
+
+    # 4. 收费记录
+    try:
+        for rec in fm.get_payments(archive_dir, name):
+            fm.delete_payment(archive_dir, rec['row'])
+    except Exception:
+        pass
+
+    lm._invalidate_meta_index(archive_dir)
+    _notify_data_changed()
+    return True
 
 
 def reactivate_student(archive_dir: str, name: str) -> bool:

@@ -275,7 +275,7 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         ensure_tool_paths()
         try:
             from lesson_manager import get_summary
-            summaries = get_summary(self.archive_dir)
+            summaries = get_summary(self.archive_dir, use_phone_used=False)
         except Exception as e:
             self._log('课时包导出失败：%s' % e, level='ERROR')
             self._send_json(500, {'code': 1, 'message': 'export failed: %s' % e})
@@ -310,7 +310,8 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         try:
             from lesson_manager import get_summary, get_detail, _norm_date as lm_norm_date
             from fee_manager import get_payments
-            summaries = get_summary(self.archive_dir)
+            # 纯明细口径：手机端拉取对账只认课时明细，PC「手机已消」列不回灌
+            summaries = get_summary(self.archive_dir, use_phone_used=False)
             details = get_detail(self.archive_dir)
             payments = get_payments(self.archive_dir)
         except Exception as e:

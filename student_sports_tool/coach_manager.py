@@ -214,3 +214,23 @@ def set_coach_active(dir_path: str, name: str, is_active: bool) -> bool:
             return True
 
     return with_retry(_do_set, max_retries=3, retry_interval=1.0)
+
+def delete_coach(dir_path: str, name: str) -> bool:
+    """硬删除教练（v23.9）：移除教练行与 _meta 条目。返回 False 表示未找到。"""
+    fpath = ensure_file(dir_path)
+
+    def _do_delete():
+        with file_lock(fpath, timeout=5.0):
+            wb = load_workbook(fpath)
+            ws = wb[COACH_SHEET]
+            for r in range(2, ws.max_row + 1):
+                if str(ws.cell(row=r, column=1).value or '').strip() == name:
+                    ws.delete_rows(r)
+                    meta = _read_meta(wb)
+                    meta.get('coaches', {}).pop(name, None)
+                    _write_meta(wb, meta)
+                    atomic_save_workbook(wb, fpath)
+                    return True
+            return False
+
+    return with_retry(_do_delete, max_retries=3, retry_interval=1.0)
