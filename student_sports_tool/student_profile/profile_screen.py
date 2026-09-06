@@ -286,8 +286,7 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
             return
         reply = dialog.confirm(
             self, '确认删除',
-            f'确定永久删除学员 [{name}] 吗？
-'
+            f'确定永久删除学员 [{name}] 吗？\n'
             '将同时删除其课时记录、收费记录与档案，删除后不可在软件内恢复！',
         )
         if not reply:

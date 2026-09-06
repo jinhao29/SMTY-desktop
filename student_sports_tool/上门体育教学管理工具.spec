@@ -50,6 +50,24 @@ datas = [
     # 必须物理打包，否则 exe 启动即 FileNotFoundError）
     ('main.py', '.'),
     ('training_tool\\main.py', 'training_tool'),
+    ('training_tool\\cards.py', 'training_tool'),
+    ('training_tool\\exercise_library.py', 'training_tool'),
+    ('training_tool\\exporter.py', 'training_tool'),
+    ('training_tool\\feedback_storage.py', 'training_tool'),
+    ('training_tool\\lan_plan_sender.py', 'training_tool'),
+    ('training_tool\\layouts.py', 'training_tool'),
+    ('training_tool\\lesson_plan_loader.py', 'training_tool'),
+    ('training_tool\\plan_coordinator.py', 'training_tool'),
+    ('training_tool\\stage_summary_screen.py', 'training_tool'),
+    ('training_tool\\styles.py', 'training_tool'),
+    ('training_tool\\summary_processor.py', 'training_tool'),
+    ('training_tool\\task_model.py', 'training_tool'),
+    ('training_tool\\template_library_window.py', 'training_tool'),
+    ('training_tool\\template_manager.py', 'training_tool'),
+    ('training_tool\\template_recommender.py', 'training_tool'),
+    ('training_tool\\test_export.py', 'training_tool'),
+    ('training_tool\\ui_plan_screen.py', 'training_tool'),
+    ('training_tool\\ui_template_screen.py', 'training_tool'),
 ]
 
 # 隐式导入（PyInstaller 无法静态推断的模块）

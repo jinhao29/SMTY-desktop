@@ -498,8 +498,7 @@ class CoachScreen(QWidget):
             return
         reply = dialog.confirm(
             self, '确认删除',
-            f'确定永久删除教练 [{name}] 吗？
-删除后不可恢复！',
+            f'确定永久删除教练 [{name}] 吗？\n'
         )
         if not reply:
             return
