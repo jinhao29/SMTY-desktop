@@ -656,6 +656,10 @@ def main():
     app.setStyleSheet(GLOBAL_QSS)
     _f = QFont('Inter'); _f.setPointSize(10)
     app.setFont(_f)
+    # 启动模式选择：上门体育 / 俱乐部（v23.12，俱乐部端建设中）
+    from mode_selector import run_selector
+    if run_selector() != 'coaching':
+        sys.exit(0)
     w = App()
     w.show()
     # 主窗口显示后初始化托盘与自动同步
