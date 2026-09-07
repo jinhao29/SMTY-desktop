@@ -37,6 +37,7 @@ class SyncServiceManager:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._log_cbs = []
+        self._status_cbs = []     # v23.11：手机备份合并成功等同步结果回调
         self.config = {}          # 当前生效配置 {port, token, archive_dir, save_dir}
 
     # ---------- 日志 ----------
@@ -44,6 +45,26 @@ class SyncServiceManager:
         """注册日志回调（收到行文本）。重复注册由调用方自行去重。"""
         if cb and cb not in self._log_cbs:
             self._log_cbs.append(cb)
+
+    def add_status_callback(self, cb):
+        """v23.11：注册同步结果回调（收到 ('merge_ok', message) 元组）。
+
+        手机推送合并成功时触发；UI 层借此把顶栏点亮为「同步完成」。
+        回调在 HTTP 工作线程执行，UI 层自行做线程切换。
+        """
+        if cb and cb not in self._status_cbs:
+            self._status_cbs.append(cb)
+
+    def remove_status_callback(self, cb):
+        if cb in self._status_cbs:
+            self._status_cbs.remove(cb)
+
+    def _emit_status(self, kind: str, message: str):
+        for cb in list(self._status_cbs):
+            try:
+                cb(kind, message)
+            except Exception:
+                pass
 
     def remove_log_callback(self, cb):
         if cb in self._log_cbs:
@@ -88,7 +109,8 @@ class SyncServiceManager:
                     token=self.config['token'],
                     archive_dir=self.config['archive_dir'],
                     log_cb=self._log,
-                    pc_name=self._pc_name())
+                    pc_name=self._pc_name(),
+                    status_cb=self._emit_status)
             except OSError as e:
                 # 端口被占用等启动失败：不抛出，由调用方提示
                 self._log('服务启动失败：%s' % e)
@@ -151,20 +173,28 @@ class SyncServiceManager:
                 logging.exception('同步服务异常')
 
     def _usb_watch_loop(self):
-        """周期检测 adb 在线设备并自动执行 adb reverse（USB 通道自动化）。"""
-        reversed_serials = set()
+        """周期核验 adb reverse 映射（v23.11 验证式）。
+
+        旧实现「成功一次记 serial 永不重做」：拔插 USB / 手机重连 / adb 重启
+        会清空设备侧 reverse 表，之后映射永远缺失、USB 同步通道静默失效
+        （2026-09-07 李哥实机踩坑）。改为每轮核验 `reverse --list`，缺了就重建。
+        """
+        last_logged = set()
         while not self._stop_event.is_set():
             try:
-                from data_center.usb_helper import auto_reverse
-                serials = auto_reverse(self.config.get('port', 8765),
-                                       already_done=reversed_serials)
+                from data_center.usb_helper import ensure_reverse
+                serials = ensure_reverse(self.config.get('port', 8765))
                 for s in serials:
-                    reversed_serials.add(s)
-                    self._log('USB 设备已自动连接（adb reverse）：%s' % s)
+                    if s not in last_logged:
+                        self._log('USB 设备已自动连接（adb reverse）：%s' % s)
+                # 状态变化才打日志：本轮重建过的记下，下一轮核验通过即静默
+                if serials:
+                    last_logged = set(serials)
+                elif last_logged:
+                    last_logged = set()
             except Exception as e:
                 logging.debug('USB 轮询异常：%s', e)
             self._stop_event.wait(USB_WATCH_INTERVAL)
-        reversed_serials.clear()
 
     @staticmethod
     def _pc_name() -> str:

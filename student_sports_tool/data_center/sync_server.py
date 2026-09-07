@@ -41,6 +41,7 @@ _merge_lock = threading.Lock()
 
 # 设备登记锁：/device/hello 并发写 config 串行化
 _device_lock = threading.Lock()
+_last_device_touch = 0.0  # v23.10：业务请求触发的设备在线刷新节流
 
 
 def _to_int(v) -> int:
@@ -76,6 +77,7 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
     archive_dir: str = ''          # 空 = 仅保存不合并（兼容模式）
     pc_name: str = ''              # PC 名称（hello 响应 / 手机端展示）
     log_cb = None                  # 可选：外部日志回调（内嵌 UI / 控制台共用）
+    status_cb = None               # v23.11：同步结果回调 ('merge_ok', message)
 
     # === 路由 ===
     def do_GET(self):
@@ -107,10 +109,64 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         if not self.server_token:
             return True
         if self.headers.get('X-Sync-Token', '') == self.server_token:
+            self._touch_device()
             return True
         self._send_json(401, {'code': 1, 'message': 'Unauthorized: token mismatch'})
         self._log('鉴权失败', level='ERROR')
         return False
+
+    def _touch_device(self):
+        """v23.10：业务请求即在线。USB / 蜂窝场景手机收不到心跳广播、不发 hello，
+        但每次同步必然产生带 token 的业务请求——凭 X-Device-Name 头（缺省按来源
+        回退）刷新 sync_devices 的 last_seen，顶栏在线指示即可覆盖 USB 场景。
+        30s 模块级节流；与 hello 共用同名记录（按 name 匹配既有键，避免双条）。"""
+        global _last_device_touch
+        now = time.time()
+        if now - _last_device_touch < 30:
+            return
+        device_name = (self.headers.get('X-Device-Name') or '').strip()
+        if not device_name:
+            src = self.client_address[0]
+            device_name = '手机（USB）' if src == '127.0.0.1' else '手机（%s）' % src
+        _last_device_touch = now
+        with _device_lock:
+            try:
+                from data_center.config_manager import load_config, update_config
+                cfg = load_config(self.archive_dir)
+                devices = cfg.get('sync_devices') or {}
+                exist_key = next(
+                    (k for k, v in devices.items() if v.get('name') == device_name), None)
+                key = exist_key or device_name
+                dev = devices.get(key) or {}
+                ts = time.strftime('%Y-%m-%d %H:%M:%S')
+                # v23.10：连接即同步——设备首次出现或离线超 5 分钟后重新出现，
+                # 广播一次让手机自动跟上（合并路径不广播，无死循环风险）
+                reonline = False
+                if dev.get('last_seen'):
+                    try:
+                        last = time.mktime(time.strptime(
+                            dev['last_seen'], '%Y-%m-%d %H:%M:%S'))
+                        reonline = (now - last) > 300
+                    except (ValueError, TypeError, OSError):
+                        reonline = False
+                else:
+                    reonline = True  # 首次接入也广播：新设备空库立即拉取灌数据
+                devices[key] = {
+                    'name': device_name,
+                    'first_seen': dev.get('first_seen') or ts,
+                    'last_seen': ts,
+                    'trusted': dev.get('trusted', True),
+                }
+                update_config(self.archive_dir, {'sync_devices': devices})
+                if reonline:
+                    try:
+                        from data_center.sync_beacon import notify_data_changed
+                        notify_data_changed()
+                        self._log('设备上线：%s → 已通知自动同步' % device_name)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
     # === 上传：保存 + 校验 + 合并 ===
     def _handle_upload(self):
@@ -208,6 +264,12 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
                                              progress_cb=on_progress)
             message = '已合并 %d 个档案（%s）' % (restored, os.path.basename(zip_path))
             self._log('合并完成：%s' % message)
+            # v23.11：通知 UI 层（顶栏点亮「同步完成」），回调异常不阻断响应
+            if SyncRequestHandler.status_cb:
+                try:
+                    SyncRequestHandler.status_cb('merge_ok', message)
+                except Exception:
+                    pass
             return True, message, restored
         except Exception as e:
             self._log('合并失败：%s' % e, level='ERROR')
@@ -415,7 +477,7 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
             self._log('发现新设备：%s（请在数据中心「双端同步」面板确认信任）' % device_name,
                       level='WARN')
         elif is_reonline:
-            self._log('设备上线：%s' % device_name, level='WARN')
+            self._log('设备上线：%s' % device_name)  # v23.10：降为纯日志（后台静默）
         self._log('设备回执：%s（%s）· %s'
                   % (device_name, device_id[:8], '已信任' if trusted else '待信任'))
         self._send_json(200, {'code': 0, 'trusted': trusted,
@@ -437,6 +499,11 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
                     mtime = os.path.getmtime(os.path.join(self.archive_dir, name))
                     if mtime > latest:
                         latest = mtime
+            # v23.10：PC「同步手机」按钮会 touch 信号文件计入 version——
+            # 手机在线探测循环（USB/蜂窝也通）据此发现"PC 要求同步"的跳变
+            signal_path = os.path.join(self.archive_dir, '.cache', '.sync_signal')
+            if os.path.exists(signal_path):
+                latest = max(latest, os.path.getmtime(signal_path))
         except OSError as e:
             self._send_json(500, {'code': 1, 'message': 'scan failed: %s' % e})
             return
@@ -481,19 +548,21 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
 def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
                   save_dir: str = DEFAULT_SAVE_DIR, token: str = '',
                   archive_dir: str = '', log_cb=None,
-                  pc_name: str = '') -> ThreadingHTTPServer:
+                  pc_name: str = '', status_cb=None) -> ThreadingHTTPServer:
     """创建同步服务实例（serve_forever 由调用方驱动）。
 
     参数:
         archive_dir: 档案目录；非空启用自动合并与 Excel 拉取
         log_cb: 日志回调（内嵌 UI 传信号发射器；控制台传 None 走 print）
         pc_name: PC 名称（手机端 hello 响应展示）
+        status_cb: v23.11 同步结果回调 (kind, message)，如 ('merge_ok', '已合并 9 个档案')
     """
     SyncRequestHandler.server_token = token or ''
     SyncRequestHandler.save_dir = save_dir or DEFAULT_SAVE_DIR
     SyncRequestHandler.archive_dir = archive_dir or ''
     SyncRequestHandler.pc_name = pc_name or ''
     SyncRequestHandler.log_cb = log_cb
+    SyncRequestHandler.status_cb = status_cb
     os.makedirs(SyncRequestHandler.save_dir, exist_ok=True)
     return ThreadingHTTPServer((host, port), SyncRequestHandler)
 

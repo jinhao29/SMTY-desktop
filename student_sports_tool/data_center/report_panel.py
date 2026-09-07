@@ -120,6 +120,10 @@ class ReportPanel(QWidget):
         gb_chart.setObjectName('card')
         cl = QVBoxLayout(gb_chart)
         self.chart_view = QChartView()
+        # 全局 QSS 的 font-size:14px（像素字号）会让 QtCharts 内部 QFont pointSize=-1，
+        # 每次 chart 渲染都刷 "QFont::setPointSize: Point size <= 0 (-1)" 警告；
+        # 此处用 pt 单位覆盖（pt 会映射为合法 pointSize），警告消除
+        self.chart_view.setStyleSheet('font-size: 10.5pt; background: #F5F7FA;')
         self.chart_view.setMinimumHeight(300)
         cl.addWidget(self.chart_view)
         splitter.addWidget(gb_chart)

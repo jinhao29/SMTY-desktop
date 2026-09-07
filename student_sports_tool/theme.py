@@ -14,6 +14,55 @@
 """
 
 # 浅色珊瑚橙主题（主推，与 Android 端视觉统一）
+
+# ==== 勾选框对勾图标（QSS 无法绘制勾，运行时生成 SVG 到用户数据目录引用） ====
+import os as _os
+
+
+def _ensure_checkbox_icons():
+    """生成勾选框对勾 / 半选横线 SVG，返回 (check_svg_path, minus_svg_path)。
+
+    写入 ~/.shangmentiyu/ui_assets/（源码运行与 PyInstaller 打包均可用）。
+    生成失败返回 ('', '')，QSS 回退为无勾实底样式（不阻塞导入）。
+    """
+    try:
+        user_dir = _os.path.join(_os.path.expanduser('~'), '.shangmentiyu', 'ui_assets')
+        _os.makedirs(user_dir, exist_ok=True)
+        check_path = _os.path.join(user_dir, 'checkbox_check.svg')
+        minus_path = _os.path.join(user_dir, 'checkbox_minus.svg')
+        if not _os.path.exists(check_path):
+            with open(check_path, 'w', encoding='utf-8') as f:
+                f.write(
+                    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'>"
+                    "<path d='M3.2 8.6 6.6 12 12.8 4.4' fill='none' stroke='white' "
+                    "stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+        if not _os.path.exists(minus_path):
+            with open(minus_path, 'w', encoding='utf-8') as f:
+                f.write(
+                    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'>"
+                    "<path d='M3.5 8h9' fill='none' stroke='white' "
+                    "stroke-width='2.4' stroke-linecap='round'/></svg>")
+        return check_path.replace('\\', '/'), minus_path.replace('\\', '/')
+    except OSError:
+        return '', ''
+
+
+_CHECK_SVG, _MINUS_SVG = _ensure_checkbox_icons()
+
+# 勾选框三态 image 规则（SVG 生成失败时回退空串，QSS 里空 url 行会破坏语法，需条件拼接）
+
+
+def _checkbox_image_rules() -> str:
+    if _CHECK_SVG and _MINUS_SVG:
+        return (
+            f'QCheckBox::indicator:checked {{ image: url({_CHECK_SVG}); }}\n'
+            f'QCheckBox::indicator:indeterminate {{ image: url({_MINUS_SVG}); }}\n'
+            'QCheckBox::indicator:checked:disabled '
+            f'{{ image: url({_CHECK_SVG}); }}\n'
+        )
+    return ''
+
+
 LIGHT_QSS = """
 /* ========== 全局基础 ========== */
 QMainWindow, QWidget {
@@ -72,8 +121,8 @@ QGroupBox#card::title {
 QLineEdit, QComboBox, QTextEdit, QDateEdit, QSpinBox {
     background: #FFFFFF;
     border: 1px solid #E5E5E5;
-    border-radius: 10px;
-    padding: 8px 12px;
+    border-radius: 12px;
+    padding: 9px 14px;
     color: #1A1A1A;
     selection-background-color: #FF6B47;
     selection-color: #FFFFFF;
@@ -84,30 +133,30 @@ QLineEdit:hover, QComboBox:hover, QTextEdit:hover, QDateEdit:hover, QSpinBox:hov
 }
 QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QDateEdit:focus, QSpinBox:focus {
     border: 2px solid #FF6B47;
-    padding: 7px 11px;
+    padding: 8px 13px;
 }
 QLineEdit::placeholder, QTextEdit::placeholder {
     color: #9B9B9B;
 }
 QComboBox::drop-down {
     border: none;
-    width: 26px;
+    width: 32px;
 }
 /* down-arrow 不再自定义：border-triangle 技巧在部分 Qt 版本渲染为实心小方块，
    原生箭头完整清晰（2026-09-06 修复下拉框图案残缺） */
 QComboBox QAbstractItemView {
     background: #FFFFFF;
     border: 1px solid #E5E5E5;
-    border-radius: 10px;
+    border-radius: 12px;
     color: #1A1A1A;
-    padding: 6px;
+    padding: 8px;
     outline: none;
 }
 QComboBox QAbstractItemView::item {
-    min-height: 30px;
-    padding: 4px 10px;
-    margin: 1px 2px;
-    border-radius: 6px;
+    min-height: 36px;
+    padding: 6px 14px;
+    margin: 2px 4px;
+    border-radius: 9px;
     color: #1A1A1A;
 }
 QComboBox QAbstractItemView::item:hover {
@@ -191,38 +240,40 @@ QCalendarWidget QToolButton::menu-indicator { image: none; }
     gridline-color: transparent;
 }
 
-/* ========== 按钮体系 ========== */
+/* ========== 按钮体系（胶囊风格，参考李哥 2026-09-07 Click 样式图） ========== */
 QPushButton {
-    border-radius: 10px;
-    padding: 9px 20px;
+    border-radius: 18px;
+    padding: 8px 22px;
     color: #1A1A1A;
     font-weight: 600;
-    border: none;
-    min-height: 22px;
+    border: 1px solid transparent;
+    min-height: 20px;
     background: #F0F0F0;
 }
 QPushButton:hover { background: #E5E5E5; }
 QPushButton:pressed { background: #D5D5D5; }
 
-/* 主操作（珊瑚橙底白色字） */
+/* 主操作（珊瑚橙实底胶囊 + 白字） */
 QPushButton#primary {
     background: #FF6B47;
     color: #FFFFFF;
+    border: none;
 }
 QPushButton#primary:hover { background: #FF8866; }
 QPushButton#primary:pressed { background: #E55A3A; }
 
-/* 次要操作（透明底珊瑚橙字） */
+/* 次要操作（描边胶囊：白底细描边，hover 反色——参考 Click 按钮图） */
 QPushButton#secondary {
-    background: transparent;
-    border: 1px solid #E5E5E5;
-    color: #FF6B47;
+    background: #FFFFFF;
+    border: 1.5px solid #1A1A1A;
+    color: #1A1A1A;
 }
 QPushButton#secondary:hover {
-    background: rgba(255, 107, 71, 0.08);
-    border: 1px solid #FF6B47;
+    background: #1A1A1A;
+    border: 1.5px solid #1A1A1A;
+    color: #FFFFFF;
 }
-QPushButton#secondary:pressed { background: rgba(255, 107, 71, 0.15); }
+QPushButton#secondary:pressed { background: #333333; border: 1.5px solid #333333; color: #FFFFFF; }
 
 /* 普通功能 */
 QPushButton#tertiary {
@@ -232,29 +283,31 @@ QPushButton#tertiary {
 QPushButton#tertiary:hover { background: #E5E5E5; }
 QPushButton#tertiary:pressed { background: #D5D5D5; }
 
-/* 危险操作 */
+/* 危险操作（描边胶囊） */
 QPushButton#danger {
     background: transparent;
-    border: 1px solid #FFD5D5;
+    border: 1.5px solid #FFD5D5;
     color: #E53E3E;
 }
 QPushButton#danger:hover {
-    background: #FFF5F5;
-    border: 1px solid #E53E3E;
+    background: #E53E3E;
+    border: 1.5px solid #E53E3E;
+    color: #FFFFFF;
 }
-QPushButton#danger:pressed { background: #FFE5E5; }
+QPushButton#danger:pressed { background: #C53030; border: 1.5px solid #C53030; color: #FFFFFF; }
 
 /* 智能推荐 */
 QPushButton#recommend {
     background: #F59E0B;
     color: #FFFFFF;
+    border: none;
 }
 QPushButton#recommend:hover { background: #D97706; }
 QPushButton#recommend:pressed { background: #B45309; }
 
 /* 小尺寸 */
 QPushButton#small {
-    padding: 5px 12px;
+    padding: 4px 14px;
     min-height: 18px;
     font-size: 12px;
     font-weight: 500;
@@ -337,7 +390,7 @@ QTabBar::tab:selected {
     border-bottom: 2px solid #FF6B47;
 }
 
-/* ========== 单选 / 复选 ========== */
+/* ========== 单选 / 复选（勾选框参考李哥 2026-09-07 样式图：圆角方块 + 对勾） ========== */
 QRadioButton {
     color: #1A1A1A;
     padding: 4px 12px 4px 0;
@@ -362,18 +415,32 @@ QCheckBox {
     spacing: 8px;
 }
 QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border-radius: 5px;
-    border: 2px solid #D5D5D5;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 2px solid #C9CDD4;
     background: #FFFFFF;
+}
+QCheckBox::indicator:hover {
+    border: 2px solid #FF6B47;
+    background: #FFF7F4;
 }
 QCheckBox::indicator:checked {
     border: 2px solid #FF6B47;
     background: #FF6B47;
-    image: none;
 }
-QCheckBox::indicator:hover { border: 2px solid #6B6B6B; }
+QCheckBox::indicator:indeterminate {
+    border: 2px solid #FF6B47;
+    background: #FF6B47;
+}
+QCheckBox::indicator:disabled {
+    border: 2px solid #E5E5E5;
+    background: #F0F0F0;
+}
+QCheckBox::indicator:checked:disabled {
+    border: 2px solid #E5E5E5;
+    background: #C9CDD4;
+}
 
 /* ========== 滚动条 ========== */
 QScrollBar:vertical {
@@ -436,6 +503,10 @@ QMenu::separator {
     margin: 4px 8px;
 }
 """
+
+# 勾选框对勾 / 半选图标（QSS 无法自绘勾，运行时 SVG 追加；生成失败时无 image 规则，
+# checked 仍为橙色实底方块，样式不破坏）
+LIGHT_QSS += _checkbox_image_rules()
 
 # 向后兼容别名：原深色主题已弃用，统一指向浅色珊瑚橙主题
 # 老 import 语句 `from theme import DARK_QSS` / `from theme import FINANCIAL_QSS`

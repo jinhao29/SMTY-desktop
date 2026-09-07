@@ -223,6 +223,14 @@ class _BarChart(QWidget):
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
         base_y = pad_t + chart_h
 
+        # 网格虚线（参考 Dashboard 图表：4 条横向点线）
+        grid_pen = QPen(QColor(0, 0, 0, 25))
+        grid_pen.setStyle(Qt.DotLine)
+        painter.setPen(grid_pen)
+        for j in range(1, 4):
+            gy = base_y - chart_h * j / 3
+            painter.drawLine(pad_l, int(gy), w - pad_r, int(gy))
+
         # 基线
         painter.setPen(QPen(QColor(ColorPalette.DIVIDER), 1))
         painter.drawLine(pad_l, base_y, w - pad_r, base_y)

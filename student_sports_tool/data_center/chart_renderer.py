@@ -19,6 +19,30 @@ COLOR_TEXT = QColor('#6B6B6B')
 COLOR_BG = QColor('#F5F7FA')
 
 
+def _chart_font() -> QFont:
+    """图表专用字体：显式 pointSize（全局 QSS px 字号会让 pointSize=-1，
+    QtCharts 内部 setPointSize(-1) 每帧刷警告，2026-09-07 修复）。"""
+    f = QFont('Microsoft YaHei')
+    f.setPointSize(10)
+    return f
+
+
+def _apply_chart_fonts(chart):
+    """为图表的标题 / 图例 / 已挂坐标轴设置显式字号字体。"""
+    f = _chart_font()
+    chart.setTitleFont(f)
+    try:
+        chart.legend().setFont(f)
+    except Exception:
+        pass
+    for axis in chart.axes():
+        try:
+            axis.setLabelsFont(f)
+            axis.setTitleFont(f)
+        except Exception:
+            pass
+
+
 def create_trend_chart(records):
     """创建总分趋势折线图。
 
@@ -78,6 +102,7 @@ def create_trend_chart(records):
     chart.addAxis(axis_y, Qt.AlignLeft)
     series.attachAxis(axis_y)
 
+    _apply_chart_fonts(chart)
     return chart
 
 
@@ -151,4 +176,5 @@ def create_radar_chart(first_records, last_records):
     series_first.attachAxis(radial)
     series_last.attachAxis(radial)
 
+    _apply_chart_fonts(chart)
     return chart

@@ -90,8 +90,8 @@ class Type:
 
     @classmethod
     def page_title(cls):
-        """20px / 600 页面标题"""
-        return cls._f(20, QFont.DemiBold)
+        """22px / 700 页面标题（与主应用 PageHeader 层级统一，2026-09-07）"""
+        return cls._f(22, QFont.Bold)
 
     @classmethod
     def hero(cls):
@@ -131,7 +131,7 @@ TRAINING_QSS = f"""
     border-radius: {Radius.TAG}px; padding: 4px 10px; font-size: 12px;
 }}
 #training_root QLabel#pageTitle {{
-    color: {Palette.TEXT}; font-size: 20px; font-weight: 600; background: transparent;
+    color: {Palette.TEXT}; font-size: 22px; font-weight: 700; background: transparent;
 }}
 #training_root QLabel#hero {{
     color: {Palette.TEXT}; font-size: 24px; font-weight: 600; background: transparent;

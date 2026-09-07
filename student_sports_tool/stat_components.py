@@ -22,45 +22,68 @@ from base_components import (
 
 
 class StatCard(BaseCard):
-    """数据概览小卡片：图标 + 大数字 + 描述。"""
+    """数据概览卡（参考 SaaS Dashboard 层级标准，李哥 2026-09-07 定稿）：
+
+        小灰标签(12px)          [图标位]
+        大粗数值(28px/800) +12%↗
+        [内容区/留白]
+
+    delta: 趋势文本（如 '↑12%'/'↓5%'），↑ 绿色 / ↓ 红色（KPI 口径，非股票红涨绿跌）。
+    """
+
+    _DELTA_UP = ('#1F9D55', '#E8F7EF')    # (字色, 底色)
+    _DELTA_DOWN = ('#E53E3E', '#FDEEEE')
 
     def __init__(self, icon_type, label, value='—', color=None, parent=None, delta=None):
         """
         参数:
-            icon_type: IconBox 内置图标常量
-            label: 描述文字
+            icon_type: IconBox 内置图标常量（显示于右上角小图标位）
+            label: 小灰标签（卡头）
             value: 主数值文本
             color: 图标主色（默认 ColorPalette.PRIMARY）
-            delta: 趋势小标签文本（如 ↑5.0），以 ↑ 开头显示为绿色
+            delta: 趋势小标签文本（如 ↑5.0）
         """
         super().__init__(parent=parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setMinimumHeight(100)
+        self.setMinimumHeight(96)
         color = color or ColorPalette.PRIMARY
-        h = QHBoxLayout()
-        h.setContentsMargins(0, 0, 0, 0)
-        h.setSpacing(14)
-        self.icon = IconBox(icon_type, size=44, bg_color=_fade_color(color, 0.10), fg_color=color)
         v = QVBoxLayout()
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(4)
+        v.setSpacing(6)
+
+        # 第一行：小灰标签 + 右上角图标位
+        top = QHBoxLayout()
+        top.setSpacing(8)
+        self.lbl_label = QLabel(label)
+        self.lbl_label.setFont(FontHelper.caption())
+        self.lbl_label.setStyleSheet(
+            f'color: {ColorPalette.TEXT_MUTED}; background: transparent;')
+        top.addWidget(self.lbl_label, 1)
+        self.icon = IconBox(icon_type, size=30, bg_color=_fade_color(color, 0.10),
+                            fg_color=color)
+        top.addWidget(self.icon, 0, Qt.AlignTop)
+        v.addLayout(top)
+
+        # 第二行：大数值 + 趋势胶囊
+        row = QHBoxLayout()
+        row.setSpacing(8)
         self.lbl_value = QLabel(value)
         self.lbl_value.setFont(FontHelper.stat_number())
         self.lbl_value.setStyleSheet(f'color: {ColorPalette.TEXT}; background: transparent;')
-        self.lbl_label = QLabel(label)
-        self.lbl_label.setFont(FontHelper.caption())
-        self.lbl_label.setStyleSheet(f'color: {ColorPalette.TEXT_SECONDARY}; background: transparent;')
-        v.addWidget(self.lbl_value)
+        row.addWidget(self.lbl_value, 0, Qt.AlignVCenter)
+        self.lbl_delta = None
         if delta is not None:
             self.lbl_delta = QLabel(delta)
             self.lbl_delta.setFont(FontHelper.caption())
-            delta_color = ColorPalette.ACCENT_GREEN if str(delta).startswith('↑') else ColorPalette.TEXT_MUTED
-            self.lbl_delta.setStyleSheet(f'color: {delta_color}; background: transparent;')
-            v.addWidget(self.lbl_delta)
-        v.addWidget(self.lbl_label)
-        h.addWidget(self.icon)
-        h.addLayout(v, 1)
-        self._content.setLayout(h)
+            up = str(delta).startswith('↑')
+            fg, bg = self._DELTA_UP if up else self._DELTA_DOWN
+            self.lbl_delta.setStyleSheet(
+                f'color: {fg}; background: {bg}; border-radius: 8px;'
+                'padding: 2px 7px; font-size: 11px; font-weight: 700;')
+            row.addWidget(self.lbl_delta, 0, Qt.AlignVCenter)
+        row.addStretch(1)
+        v.addLayout(row)
+        self._content.setLayout(v)
 
     def set_value(self, value):
         """更新主数值文本。"""

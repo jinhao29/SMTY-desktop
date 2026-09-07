@@ -42,10 +42,46 @@ def list_adb_devices() -> list:
     return serials
 
 
+def _reverse_list(serial: str, port: int) -> bool:
+    """查询该设备 reverse 表里是否已有 <port> 映射（true=在位）。
+
+    adb reverse 规则会因拔插 USB / 手机重连 / adb server 重启被整表清除，
+    所以不能只做「处理过一次就跳过」的标记——必须每轮真实核验。
+    """
+    out = _run(['adb', '-s', serial, 'reverse', '--list'])
+    if not out:
+        return False
+    marker = 'tcp:%d' % port
+    return any(line.split()[0] == marker
+               for line in out.splitlines() if line.strip())
+
+
+def ensure_reverse(port: int) -> list:
+    """核验式 reverse：设备在线但映射缺失（被 adb 清掉）→ 重新建立。
+
+    返回本轮新建立映射的序列号列表（供日志去重，状态变化才打日志）。
+    """
+    processed = []
+    for serial in list_adb_devices():
+        if _reverse_list(serial, port):
+            continue
+        out = _run(['adb', '-s', serial, 'reverse',
+                    f'tcp:{port}', f'tcp:{port}'])
+        # adb reverse 成功时无输出、returncode 0；_run 不暴露 code，
+        # 用「无 error 字样」粗判（失败信息以 'error' 开头）
+        if out and out.strip().lower().startswith('error'):
+            logging.debug('adb reverse 失败 [%s]：%s', serial, out.strip())
+            continue
+        processed.append(serial)
+    return processed
+
+
 def auto_reverse(port: int, already_done: set = None) -> list:
     """对在线设备执行 adb reverse（已处理过的跳过）。
 
-    返回本次新处理成功的序列号列表。
+    .. deprecated:: v23.11 改用 [ensure_reverse]——本函数的一次性标记式去重
+       在 reverse 表被 adb 清除（拔插 USB / adb 重启）后永不重建，导致
+       USB 同步通道静默失效。保留仅为兼容旧调用方。
     """
     done = already_done if already_done is not None else set()
     processed = []

@@ -12,12 +12,13 @@
 """
 import hashlib
 
-from PySide6.QtCore import Qt, QRect, Signal
+from PySide6.QtCore import Qt, QRect, Signal, Property, QEasingCurve
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QButtonGroup,
-    QSizePolicy, QStyledItemDelegate, QStyle, QApplication
+    QSizePolicy, QStyledItemDelegate, QStyle, QApplication, QTabBar
 )
+from PySide6.QtCore import QPropertyAnimation, QRectF
 
 from base_components import ColorPalette, _fade_color
 
@@ -397,10 +398,11 @@ class RowActionsDelegate(QStyledItemDelegate):
                 bg, border, fg = '#F5F5F5', '#E3E3E3', '#6B6B6B'
             painter.setPen(QPen(QColor(border), 1))
             painter.setBrush(QColor(bg))
-            painter.drawRoundedRect(rect, 8, 8)
+            # 胶囊描边（参考李哥 Click 按钮图）：圆角取高度一半
+            painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
             painter.setPen(QColor(fg))
             painter.drawText(rect, Qt.AlignCenter, label)
-        painter.restore()
+            painter.restore()
 
     def sizeHint(self, option, index):
         base = super().sizeHint(option, index)
@@ -423,3 +425,75 @@ class RowActionsDelegate(QStyledItemDelegate):
                         cb(index)
                         return True
         return False
+
+
+#==== Tab 栏：滑动下划线过渡动画（参考李哥 2026-09-07 导航样式图） ====
+
+class AnimatedTabBar(QTabBar):
+    """带滑动指示条动画的 Tab 栏。
+
+    - 文字颜色由外部 QSS 控制（选中橙色 / hover 过渡）
+    - 选中下划线由本类绘制：切换 Tab 时以 180ms OutCubic 动画滑到新位置
+    - resizeEvent 时指示条立即吸附到当前 Tab（避免错位）
+    """
+
+    _INDICATOR_H = 3
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._indicator_x = 0.0
+        self._indicator_w = 0.0
+        self._anim = QPropertyAnimation(self, b'indicatorX', self)
+        self._anim.setDuration(180)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.currentChanged.connect(self._on_current_changed)
+
+    # QPropertyAnimation 使用的属性（float，px）
+    def _get_indicator_x(self) -> float:
+        return self._indicator_x
+
+    def _set_indicator_x(self, v: float):
+        self._indicator_x = float(v)
+        self.update()
+
+    indicatorX = Property(float, _get_indicator_x, _set_indicator_x)
+
+    def _target_geometry(self, index: int):
+        """返回当前 index 指示条的 (x, width)（居中缩窄版，参考图7 文字宽度感）。"""
+        r = self.tabRect(index)
+        w = max(28.0, min(float(r.width()) - 24.0, 72.0))
+        x = r.x() + (r.width() - w) / 2.0
+        return x, w
+
+    def _snap(self, index: int):
+        x, w = self._target_geometry(index)
+        self._indicator_x = x
+        self._indicator_w = w
+        self.update()
+
+    def _on_current_changed(self, index: int):
+        self._indicator_w = self._target_geometry(index)[1]
+        self._anim.stop()
+        self._anim.setStartValue(self._indicator_x)
+        self._anim.setEndValue(self._target_geometry(index)[0])
+        self._anim.start()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.count():
+            self._snap(self.currentIndex())
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.count() <= 0 or self.currentIndex() < 0:
+            return
+        if self._indicator_w <= 0:
+            self._snap(self.currentIndex())
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        y = self.height() - self._INDICATOR_H - 1
+        rect = QRectF(self._indicator_x, y, self._indicator_w, self._INDICATOR_H)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor('#FF6B47'))
+        painter.drawRoundedRect(rect, self._INDICATOR_H / 2, self._INDICATOR_H / 2)
+        painter.end()

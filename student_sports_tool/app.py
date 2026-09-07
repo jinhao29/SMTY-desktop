@@ -18,6 +18,7 @@
 """
 import modern_dialog as dialog
 import os
+import time
 import sys
 import logging
 import importlib.util
@@ -84,9 +85,10 @@ training_mod = _load_module('training_main', os.path.join(TRAINING_DIR, 'main.py
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QStackedWidget, QSystemTrayIcon, QMessageBox, QLineEdit, QLabel, QSizePolicy
+    QStackedWidget, QSystemTrayIcon, QMessageBox, QLineEdit, QLabel, QSizePolicy,
+    QPushButton
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 from theme import LIGHT_QSS
 from side_navigation import SideNav
@@ -114,10 +116,16 @@ PAGE_ARCHIVE = 3
 PAGE_TRAINING = 4
 PAGE_DATA_CENTER = 5
 PAGE_FINANCE = 6
+# 详情页（不在侧边栏菜单中，仅由表格行点击进入）
+PAGE_STUDENT_DETAIL = 7
+PAGE_COACH_DETAIL = 8
 
 
 class App(QMainWindow):
     """统一主窗口：左侧 SideNav + 右侧 QStackedWidget。"""
+
+    # v23.11：同步服务线程回调 → UI 线程桥（手机备份合并成功等）
+    syncMergeOk = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -226,6 +234,26 @@ class App(QMainWindow):
         self.finance_page.set_archive_dir(self.archive_win.get_current_directory())
         self.stack.addWidget(self.finance_page)
 
+        # Page 7/8：学员 / 教练个人详情页（表格行点击进入，不在侧边栏）
+        from detail_page import StudentDetailPage, CoachDetailPage
+        self.student_detail = StudentDetailPage(
+            archive_dir_getter=lambda: self.archive_win.le_dir.text().strip()
+        )
+        self.student_detail.backRequested.connect(
+            lambda: self._back_from_detail(PAGE_PROFILE))
+        self.stack.addWidget(self.student_detail)
+
+        self.coach_detail = CoachDetailPage(
+            archive_dir_getter=lambda: self.archive_win.le_dir.text().strip()
+        )
+        self.coach_detail.backRequested.connect(
+            lambda: self._back_from_detail(PAGE_COACH))
+        self.stack.addWidget(self.coach_detail)
+
+        # 表格行点击 → 详情页
+        self.profile_screen.studentActivated.connect(self.open_student_detail)
+        self.coach_screen.coachActivated.connect(self.open_coach_detail)
+
         # 默认选中首页
         self.side_nav.select(PAGE_HOME)
         self.stack.setCurrentIndex(PAGE_HOME)
@@ -247,6 +275,11 @@ class App(QMainWindow):
             if _cfg.get('sync_auto_start', True):
                 _svc = get_service()
                 _svc.add_log_callback(lambda line: logging.info(line))
+                # v23.11：手机合并成功 → 跨线程信号 → 顶栏「● 同步完成」+ 刷新页面
+                # _emit_status 回调签名是 (kind, message)，信号只带 message
+                _svc.add_status_callback(
+                    lambda kind, msg: self.syncMergeOk.emit(msg))
+                self.syncMergeOk.connect(self._on_merge_ok)
                 _svc.start(
                     port=int(_cfg.get('sync_port') or 8765),
                     token=str(_cfg.get('sync_token') or ''),
@@ -301,9 +334,23 @@ class App(QMainWindow):
             padding: 0 8px;
         ''')
         lay.addWidget(self.lbl_devices)
+
+        # v23.10：PC 主动同步按钮——UDP 广播喊手机立即双向对齐（后台静默）
+        self.btn_sync_now = QPushButton('⟳  同步手机')
+        self.btn_sync_now.setCursor(Qt.PointingHandCursor)
+        self.btn_sync_now.setStyleSheet('''
+            QPushButton {
+                color: #6B6B6B; font-size: 12px; font-weight: 500;
+                background: transparent; border: 1px solid transparent;
+                border-radius: 4px; padding: 2px 10px;
+            }
+            QPushButton:hover { color: #FF6B47; border-color: #FF6B47; }
+        ''')
+        self.btn_sync_now.clicked.connect(self._manual_sync_now)
+        lay.addWidget(self.btn_sync_now)
         self._device_timer = QTimer(self)
         self._device_timer.timeout.connect(self._refresh_device_indicator)
-        self._device_timer.start(30_000)
+        self._device_timer.start(15_000)  # v23.10：30s→15s，业务请求即在线后更快亮灯
         QTimer.singleShot(3_000, self._refresh_device_indicator)
 
         # 用户信息
@@ -318,6 +365,28 @@ class App(QMainWindow):
         lay.addWidget(user)
 
         parent_layout.addWidget(top)
+
+    def _manual_sync_now(self):
+        """v23.10：PC 主动同步——双通道：
+        ① UDP 广播 desktop_data_changed（Wi-Fi 场景即时生效）；
+        ② touch 信号文件计入 /sync/version（USB/蜂窝场景由手机在线探测轮询发现）。
+        手机端同步完成后 Toast 反馈；PC 端显示广播是否发出。"""
+        try:
+            from data_center.sync_beacon import notify_data_changed
+            sent = notify_data_changed()
+            # 信号文件：version 跳变，USB/蜂窝下手机探测循环 10s 内发现
+            archive_dir = self.archive_win.get_current_directory()
+            signal_path = os.path.join(archive_dir, '.cache', '.sync_signal')
+            os.makedirs(os.path.dirname(signal_path), exist_ok=True)
+            with open(signal_path, 'w', encoding='utf-8') as f:
+                f.write(str(time.time()))
+            if sent:
+                self.lbl_sync.setText('●  已广播，手机收到后自动同步')
+            else:
+                self.lbl_sync.setText('●  已记录同步指令（USB 模式，手机稍后自动拉取）')
+        except Exception as e:
+            self.lbl_sync.setText('○  通知失败：%s' % (e or '未知错误'))
+        QTimer.singleShot(6_000, lambda: self.lbl_sync.setText('●  同步待命'))
 
     def _refresh_device_indicator(self):
         """v23.6：刷新顶栏「手机在线」指示（config sync_devices 最近回执 5 分钟内算在线）。"""
@@ -358,7 +427,8 @@ class App(QMainWindow):
 
     # === 导航事件处理 ===
 
-    _PAGE_TITLES = ('首页', '学员档案', '教练管理', '体测档案与课时', '训练任务编排', '数据中心', '财务管理')
+    _PAGE_TITLES = ('首页', '学员档案', '教练管理', '体测档案与课时', '训练任务编排',
+                    '数据中心', '财务管理', '学员详情', '教练详情')
 
     def _on_page_changed(self, index: int):
         """侧边栏菜单项点击：切换 QStackedWidget 页面。"""
@@ -367,6 +437,31 @@ class App(QMainWindow):
             self.lbl_page_title.setText(self._PAGE_TITLES[index])
         self._refresh_nav_badge()
         self._sync_archive_dir_for_page(index)
+
+    #==== 详情页导航 ====
+
+    def open_student_detail(self, name: str):
+        """打开学员详情页（学员档案表格行点击 / 详情按钮）。"""
+        self._detail_origin = PAGE_PROFILE
+        self.student_detail.load_student(name)
+        self.stack.setCurrentIndex(PAGE_STUDENT_DETAIL)
+        self.lbl_page_title.setText(self._PAGE_TITLES[PAGE_STUDENT_DETAIL])
+
+    def open_coach_detail(self, name: str):
+        """打开教练详情页（教练管理表格行点击 / 详情按钮）。"""
+        self._detail_origin = PAGE_COACH
+        self.coach_detail.load_coach(name)
+        self.stack.setCurrentIndex(PAGE_COACH_DETAIL)
+        self.lbl_page_title.setText(self._PAGE_TITLES[PAGE_COACH_DETAIL])
+
+    def _back_from_detail(self, default_page: int):
+        """详情页「返回」：回到来源管理页（默认学员档案/教练管理）。"""
+        target = getattr(self, '_detail_origin', default_page) or default_page
+        self.stack.setCurrentIndex(target)
+        self.side_nav.select(target)
+        if 0 <= target < len(self._PAGE_TITLES):
+            self.lbl_page_title.setText(self._PAGE_TITLES[target])
+        self._sync_archive_dir_for_page(target)
 
     def _on_global_search(self, text: str):
         """侧边栏全局搜索：跳转学员档案页并按关键字过滤（回车提交）。"""
@@ -503,6 +598,15 @@ class App(QMainWindow):
             padding: 0 8px;
         ''')
 
+    def _on_merge_ok(self, message: str):
+        """手机端备份合并成功（v23.11）：顶栏亮绿 + 刷新各页数据，6 秒后回待命。"""
+        self._on_sync_state('ok')
+        self.refresh_after_sync()
+        self._merge_ok_reset = QTimer(self)
+        self._merge_ok_reset.setSingleShot(True)
+        self._merge_ok_reset.timeout.connect(lambda: self._on_sync_state('idle'))
+        self._merge_ok_reset.start(6000)
+
     def refresh_after_sync(self):
         """自动同步完成后调用：刷新各页面的学员列表与档案数据。"""
         try:
@@ -512,6 +616,39 @@ class App(QMainWindow):
                 self.training_win.refresh_current_tab_students()
         except Exception:
             logging.exception('同步后刷新页面失败')
+
+    def closeEvent(self, event):
+        """退出前统一收尾后台线程（修复退出时 QThread still running 报错）。
+
+        - AutoBackupManager 的 QThread：停止调度器（此前其 closeEvent 因
+          嵌在 QStackedWidget 中永远不会触发，线程随 QApplication 销毁时报错）
+        - 自动同步管理器：停止扫描定时器，等待进行中的 SyncWorker 退出
+        - 双端同步服务（HTTP/心跳/USB 轮询 daemon 线程）：优雅 shutdown
+        """
+        try:
+            if getattr(self, '_sync_mgr', None) is not None:
+                self._sync_mgr.stop()
+                # 若有恢复任务在跑，最多等 3 秒（避免 QThread 销毁时仍在运行）
+                worker = getattr(self._sync_mgr, '_worker', None)
+                if worker is not None and worker.isRunning():
+                    worker.wait(3000)
+        except Exception:
+            logging.exception('停止自动同步管理器失败')
+        try:
+            self.data_center.stop_auto_backup()
+        except Exception:
+            logging.exception('停止自动备份线程失败')
+        try:
+            from data_center.sync_service import get_service
+            get_service().stop()
+        except Exception:
+            logging.exception('停止双端同步服务失败')
+        try:
+            if getattr(self, '_tray', None) is not None:
+                self._tray.hide()
+        except Exception:
+            pass
+        super().closeEvent(event)
 
 
 def main():

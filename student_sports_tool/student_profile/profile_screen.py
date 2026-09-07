@@ -16,7 +16,7 @@
 import modern_dialog as dialog
 import os
 import sys
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -46,6 +46,9 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
     # 表格列（含操作列，仅用于表头长度参考；实际表头由 StudentTableModel 提供）
     COLUMNS = ['姓名', '年龄', '身高', '体重', 'BMI', '体型', '年级',
                '总课时', '已上', '剩余', '状态', '操作']
+
+    # 双击行 / 操作列「详情」时发射（App 据此打开学员详情页）
+    studentActivated = Signal(str)
 
     def __init__(self, archive_dir_getter=None, parent=None):
         """
@@ -138,19 +141,22 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
             QHeaderView::section { padding: 10px 4px; font-size: 12px; }
         ''')
         self.table.setMinimumHeight(400)
-        self.table.doubleClicked.connect(self.on_edit)
+        # 双击行 → 学员详情页（编辑走操作列「编辑」按钮 / 右键菜单）
+        self.table.doubleClicked.connect(self._on_open_detail)
 
         # delegates：姓名头像 / 状态徽章 / 行内操作（在职行与停用行按钮组不同）
         self.table.setItemDelegateForColumn(0, AvatarNameDelegate(self.table))
         self.table.setItemDelegateForColumn(10, StatusBadgeDelegate(self.table))
         self.table.setItemDelegateForColumn(11, RowActionsDelegate({
             'active': [
+                ('详情', self._on_open_detail_index),
                 ('编辑', self._on_action_edit),
                 ('课时', self._on_action_lesson),
                 ('停用', self._on_action_deactivate),
                 ('删除', self._on_action_delete),
             ],
             'inactive': [
+                ('详情', self._on_open_detail_index),
                 ('恢复', self._on_action_reactivate),
                 ('删除', self._on_action_delete),
             ],
@@ -173,7 +179,7 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         self.lbl_footer.setTextFormat(Qt.RichText)
         fl.addWidget(self.lbl_footer)
         fl.addStretch()
-        self.lbl_hint = QLabel('双击行编辑 · 右键恢复停用学员')
+        self.lbl_hint = QLabel('双击行查看详情 · 编辑走操作列「编辑」')
         self.lbl_hint.setStyleSheet('color: #9B9B9B; font-size: 12px; background: transparent; border: none;')
         fl.addWidget(self.lbl_hint)
         lay.addWidget(footer)
@@ -250,6 +256,23 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         self.lbl_footer.setText(' &nbsp;·&nbsp; '.join(parts))
 
     #==== chips / 行内操作事件 ====
+
+    def _row_student_name(self, index) -> str:
+        """源模型 index → 学员名（越界返回空串）。"""
+        return self._source_model.get_student_name_at(index.row()) or ''
+
+    def _on_open_detail_index(self, index):
+        """操作列「详情」按钮：按源行精确定位学员并打开详情页。"""
+        name = self._row_student_name(index)
+        if name:
+            self.studentActivated.emit(name)
+
+    def _on_open_detail(self, proxy_index):
+        """双击行：打开学员详情页（替代原双击编辑）。"""
+        src = self._proxy_model.mapToSource(proxy_index)
+        name = self._source_model.get_student_name_at(src.row())
+        if name:
+            self.studentActivated.emit(name)
 
     def _on_filter_changed(self, key: str):
         """chips 切换：更新代理模型状态过滤并同步底部栏显示数量。"""

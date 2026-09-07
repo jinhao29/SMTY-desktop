@@ -95,7 +95,7 @@ class FontHelper:
 
     @classmethod
     def stat_number(cls):
-        return cls._make(26, QFont.Bold, True)
+        return cls._make(28, QFont.Bold, True)
 
 
 class Shadows:
@@ -403,11 +403,14 @@ class StatCell(QFrame):
         )
         lay.addWidget(cap)
         self._value = QLabel('—')
-        self._value.setStyleSheet(
-            f'color: {accent or ColorPalette.TEXT}; font-size: 24px;'
+        self._value.setStyleSheet(self._style(accent or ColorPalette.TEXT))
+        lay.addWidget(self._value)  # 忘挂布局会被 GC 回收（历史坑）
+
+    def _style(self, color: str) -> str:
+        return (
+            f'color: {color}; font-size: 26px;'
             'font-weight: 800; background: transparent; border: none;'
         )
-        lay.addWidget(self._value)
 
     def set_value(self, value):
         """设置数值（int 或 str）。accent 模式下非 0 才高亮。"""
@@ -415,9 +418,7 @@ class StatCell(QFrame):
         if self._accent:
             active = bool(value)
             self._value.setStyleSheet(
-                f'color: {self._accent if active else ColorPalette.TEXT};'
-                'font-size: 24px; font-weight: 800; background: transparent; border: none;'
-            )
+                self._style(self._accent if active else ColorPalette.TEXT))
 
 
 def compute_overview(students: list) -> dict:
@@ -478,8 +479,8 @@ def refresh_row_actions(table):
                     background: #FFF7F5;
                     color: {ColorPalette.PRIMARY};
                     border: 1px solid #FFD5C8;
-                    border-radius: 8px;
-                    padding: 3px 10px;
+                    border-radius: 11px;
+                    padding: 3px 12px;
                     font-size: 12px;
                     font-weight: 500;
                 }}

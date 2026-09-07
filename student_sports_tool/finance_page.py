@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from base_components import FormSheet, IconBox, ColorPalette
 from stat_components import StatCard
+from detail_page import FinanceBar, FinanceLegendRow
 import fee_manager as fm
 
 DEFAULT_DIR = os.path.expanduser('~/Desktop/学员档案')
@@ -171,9 +172,25 @@ class FinancePage(QWidget):
             stats_row.addWidget(s, 1)
         mid_lay.addLayout(stats_row)
 
-        # 连续版面：学员财务一览 + 收费记录
+        # 连续版面：收入构成 + 学员财务一览 + 收费记录
         sheet = FormSheet()
         mid_lay.addWidget(sheet, 1)
+
+        # --- 收入构成（横向分段柱状图，参考图2 Cap table 风格）---
+        bar_lay = QVBoxLayout()
+        bar_lay.setContentsMargins(0, 0, 0, 0)
+        bar_lay.setSpacing(6)
+        self.finance_bar = FinanceBar()
+        bar_lay.addWidget(self.finance_bar)
+        legend_row = QHBoxLayout()
+        legend_row.setSpacing(24)
+        self.legend_paid = FinanceLegendRow('实收', '¥0.00', '0%', FinanceBar.PAID_COLOR)
+        self.legend_due = FinanceLegendRow('待收', '¥0.00', '0%', FinanceBar.DUE_COLOR)
+        legend_row.addWidget(self.legend_paid, 1)
+        legend_row.addWidget(self.legend_due, 1)
+        legend_row.addStretch()
+        bar_lay.addLayout(legend_row)
+        sheet.add_section('收入构成（实收 / 待收占比）', bar_lay)
 
         # --- 学员财务一览 ---
         stu_lay = QVBoxLayout()
@@ -270,6 +287,7 @@ class FinancePage(QWidget):
             payments = fm.get_payments(self._dir_path)
             totals = fm.compute_totals(rows, payments)
             self._fill_stats(totals)
+            self._fill_finance_bar(totals)
             self._fill_student_table(rows)
             self._fill_payment_table(payments)
         except Exception:
@@ -282,6 +300,15 @@ class FinancePage(QWidget):
         self.stat_due.lbl_value.setText(_fmt_money(totals['total_due']))
         self.stat_month.lbl_value.setText(
             f"{_fmt_money(totals['month_paid'])}（{totals['month_prefix']}）")
+
+    def _fill_finance_bar(self, totals):
+        """刷新收入构成柱状图与图例（实收 / 待收）。"""
+        paid = max(0.0, float(totals.get('total_paid') or 0))
+        due = max(0.0, float(totals.get('total_due') or 0))
+        total = paid + due
+        self.finance_bar.set_data(paid, due)
+        self.legend_paid.set_data('实收', paid, total)
+        self.legend_due.set_data('待收', due, total)
 
     def _fill_student_table(self, rows):
         t = self.table_students
@@ -328,12 +355,12 @@ class FinancePage(QWidget):
                 t.setItem(r, c, item)
             btn = QPushButton('删除')
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(52, 24)
+            btn.setFixedSize(56, 24)
             btn.setStyleSheet(
                 'QPushButton { background: transparent; border: 1px solid #FFD5D5;'
-                ' color: #E53E3E; border-radius: 6px; padding: 0;'
+                ' color: #E53E3E; border-radius: 12px; padding: 0;'
                 ' font-size: 12px; }'
-                'QPushButton:hover { background: #FFF5F5; border-color: #E53E3E; }')
+                'QPushButton:hover { background: #E53E3E; border-color: #E53E3E; color: #FFFFFF; }')
             btn.clicked.connect(lambda _=False, row=p['row']: self.on_del_payment(row))
             t.setCellWidget(r, 5, btn)
 

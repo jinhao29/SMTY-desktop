@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QTabWidget, QFileDialog, QMessageBox, QComboBox, QSpinBox,
     QCheckBox, QGroupBox, QFrame
 )
-from PySide6.QtGui import QFont
 
 # 注入父目录（student_sports_tool/）以便导入 base_components
 _PARENT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +30,7 @@ from renewal_panel import RenewalPanel
 from schedule_achievement_panel import ScheduleAchievementPanel
 from sync_panel import SyncServerPanel
 from base_components import ColorPalette, StatCell
+from manage_components import AnimatedTabBar
 
 DEFAULT_DIR = os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案')
 
@@ -153,11 +153,12 @@ class DataCenterWindow(QWidget):
         lay.setSpacing(22)
         lay.setContentsMargins(20, 20, 20, 20)
 
-        # 标题
+        # 标题（22px/800，与全应用 PageHeader 层级统一）
         title = QLabel('数据中心')
-        title.setObjectName('title')
-        _f = QFont('微软雅黑'); _f.setPointSize(20); _f.setBold(True)
-        title.setFont(_f)
+        title.setStyleSheet(
+            f'color: {ColorPalette.TEXT}; font-size: 22px; font-weight: 800;'
+            'background: transparent;'
+        )
         lay.addWidget(title)
 
         # === 数据中心概览条（真数据：自动备份状态 / 上次备份 / 本次会话备份次数 / 档案文件数）===
@@ -216,28 +217,29 @@ class DataCenterWindow(QWidget):
         dl.addStretch()
         lay.addWidget(dir_w)
 
-        # 子 Tab
+        # 子 Tab（AnimatedTabBar：选中下划线 180ms 滑动过渡 + hover 变色）
         self.tabs = QTabWidget()
+        self.tabs.setTabBar(AnimatedTabBar(self.tabs))
+        self.tabs.setTabPosition(QTabWidget.North)
+        self.tabs.setDocumentMode(False)
         self.tabs.setStyleSheet("""
             QTabWidget::pane { border: none; background: #FFFFFF; }
+            QTabBar {
+                qproperty-drawBase: 0;
+                background: #FFFFFF;
+            }
             QTabBar::tab {
                 background: #FFFFFF;
                 color: #6B6B6B;
-                padding: 10px 28px;
+                padding: 10px 24px;
                 font-size: 14px;
                 font-weight: 600;
                 border: none;
                 border-bottom: 2px solid transparent;
-                border-top-left-radius: 10px;
-                border-top-right-radius: 10px;
                 margin-right: 4px;
             }
-            QTabBar::tab:hover { background: #F5F7FA; color: #FF6B47; }
-            QTabBar::tab:selected {
-                background: #FFFFFF;
-                color: #FF6B47;
-                border-bottom: 2px solid #FF6B47;
-            }
+            QTabBar::tab:hover { color: #FF6B47; }
+            QTabBar::tab:selected { color: #FF6B47; border-bottom: 2px solid transparent; }
         """)
 
         self.panel_backup = BackupPanel(self._get_dir, on_auto_backup_clicked=self._open_auto_backup_panel)

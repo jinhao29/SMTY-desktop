@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QLabel, QSpinBox,
     QMessageBox, QMenu, QSplitter, QApplication, QDialog, QCheckBox,
-    QFileDialog, QFrame, QLineEdit
+    QFileDialog, QFrame, QLineEdit, QAbstractItemView
 )
 
 import renewal_coordinator as rc
@@ -107,7 +107,9 @@ class RenewalPanel(QWidget):
         self.tbl_renewal.setColumnCount(7)
         self.tbl_renewal.setHorizontalHeaderLabels(
             ['学员', '总课时', '已上', '剩余', '最近上课', '状态', '跟进备注'])
-        self.tbl_renewal.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+        # 列宽策略：数值列固定窄宽，备注列唯一 Stretch，操作列自适应——
+        # 修复窄窗口下右侧「操作」列被挤出可视区（2026-09-07 李哥反馈）
+        self._apply_safe_column_layout(self.tbl_renewal, stretch_col=6)
         self.tbl_renewal.setAlternatingRowColors(True)
         self.tbl_renewal.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tbl_renewal.customContextMenuRequested.connect(self._renewal_menu)
@@ -127,7 +129,7 @@ class RenewalPanel(QWidget):
         self.tbl_inactive.setColumnCount(6)
         self.tbl_inactive.setHorizontalHeaderLabels(
             ['学员', '最近上课', '未上天数', '剩余课时', '联系电话', '状态'])
-        self.tbl_inactive.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self._apply_safe_column_layout(self.tbl_inactive, stretch_col=4)
         self.tbl_inactive.setAlternatingRowColors(True)
         self.tbl_inactive.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tbl_inactive.customContextMenuRequested.connect(self._inactive_menu)
@@ -141,6 +143,25 @@ class RenewalPanel(QWidget):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         lay.addWidget(splitter, 1)
+
+    def _apply_safe_column_layout(self, table, stretch_col: int):
+        """防遮挡列宽策略：窄列固定 / 内容列自适应 / 指定列 Stretch。
+
+        背景：默认所有列 100px，加上操作列（约 180px）后总宽超出可视区时，
+        右侧「操作」列被整列挤出视野（横向滚动条在 Windows 11 下是悬浮式，
+        视觉上等于「被遮挡」）。此布局保证列总宽最小化，Stretch 列吸收余量。
+
+        注意：操作列由 install_row_actions 追加（调用后再设 ResizeToContents）。
+        """
+        header = table.horizontalHeader()
+        header.setMinimumSectionSize(44)
+        for col in range(table.columnCount()):
+            if col == stretch_col:
+                header.setSectionResizeMode(col, QHeaderView.Stretch)
+            else:
+                header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        header.setStretchLastSection(False)
+        table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
 
     def refresh(self):
         """刷新预警数据。"""

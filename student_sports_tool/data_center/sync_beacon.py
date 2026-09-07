@@ -137,7 +137,7 @@ def notify_data_changed(version: int = 0):
     import time as _t
     now = _t.time()
     if now - _last_notify_ts < _NOTIFY_DEBOUNCE:
-        return
+        return True  # 节流窗口内：指令刚广播过，视为已通知
     _last_notify_ts = now
     try:
         local = local_ip()
@@ -152,14 +152,19 @@ def notify_data_changed(version: int = 0):
             if (ip, UDP_PORT) not in targets:
                 targets.append((ip, UDP_PORT))
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sent = 0
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             for target in targets:
                 try:
                     sock.sendto(payload, target)
+                    sent += 1
                 except OSError:
                     pass
         finally:
             sock.close()
+        # v23.10：返回是否至少成功发出一个目标（UDP 无回执，送达与否由手机端 Toast 反馈）
+        return sent > 0
     except Exception:
         logging.debug('数据变更广播失败', exc_info=True)
+        return False

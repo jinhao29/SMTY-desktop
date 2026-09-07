@@ -13,7 +13,7 @@
 import os
 import sys
 
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
@@ -275,6 +275,9 @@ class CoachScreen(QWidget):
 
     COLUMNS = HEADER_LABELS
 
+    # 双击行 / 操作列「详情」时发射（App 据此打开教练详情页）
+    coachActivated = Signal(str)
+
     def __init__(self, archive_dir_getter=None, parent=None):
         super().__init__(parent)
         self._get_dir = archive_dir_getter or (lambda: '')
@@ -346,18 +349,21 @@ class CoachScreen(QWidget):
         header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header.setFixedHeight(44)
         self.table.setMinimumHeight(400)
-        self.table.doubleClicked.connect(self.on_edit)
+        # 双击行 → 教练详情页（编辑走操作列「编辑」按钮 / 右键菜单）
+        self.table.doubleClicked.connect(self._on_open_detail)
 
         # delegates：姓名头像 / 状态徽章 / 行内操作
         self.table.setItemDelegateForColumn(0, AvatarNameDelegate(self.table))
         self.table.setItemDelegateForColumn(5, StatusBadgeDelegate(self.table))
         self.table.setItemDelegateForColumn(6, RowActionsDelegate({
             'active': [
+                ('详情', self._on_open_detail_index),
                 ('编辑', self._on_action_edit),
                 ('离职', self._on_action_deactivate),
                 ('删除', self._on_action_delete),
             ],
             'inactive': [
+                ('详情', self._on_open_detail_index),
                 ('恢复', self._on_action_reactivate),
                 ('删除', self._on_action_delete),
             ],
@@ -379,7 +385,7 @@ class CoachScreen(QWidget):
         self.lbl_footer.setStyleSheet('color: #6B6B6B; font-size: 13px; background: transparent; border: none;')
         fl.addWidget(self.lbl_footer)
         fl.addStretch()
-        self.lbl_hint = QLabel('双击行编辑 · 右键恢复离职教练')
+        self.lbl_hint = QLabel('双击行查看详情 · 编辑走操作列「编辑」')
         self.lbl_hint.setStyleSheet('color: #9B9B9B; font-size: 12px; background: transparent; border: none;')
         fl.addWidget(self.lbl_hint)
         lay.addWidget(footer)
@@ -422,6 +428,20 @@ class CoachScreen(QWidget):
     def _on_search(self, text: str):
         """搜索过滤由代理模型负责。"""
         self._proxy_model.set_keyword(text)
+
+    def _on_open_detail_index(self, index):
+        """操作列「详情」按钮：按源行定位教练并打开详情页。"""
+        if index is None or not index.isValid():
+            return
+        coach = self._source_model.get_coach_at(index.row())
+        if coach.get('name'):
+            self.coachActivated.emit(coach['name'])
+
+    def _on_open_detail(self, proxy_index):
+        """双击行：打开教练详情页（替代原双击编辑）。"""
+        coach = self._proxy_model.get_coach_at_proxy(proxy_index.row())
+        if coach.get('name'):
+            self.coachActivated.emit(coach['name'])
 
     def _on_filter_changed(self, key: str):
         """chips 切换：更新代理模型状态过滤。"""

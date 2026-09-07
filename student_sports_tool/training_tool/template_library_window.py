@@ -125,7 +125,11 @@ class TemplateLibraryWindow(QWidget):
         categories = get_categories()
         for cat in categories:
             cat_item = QTreeWidgetItem(self.tree, [cat])
-            cat_item.setFont(0, QFont('微软雅黑', bold=True))
+            # QFont 构造器不支持 bold 关键字（会抛 AttributeError），显式 setBold
+            _cat_font = QFont('微软雅黑')
+            _cat_font.setPointSize(12)
+            _cat_font.setBold(True)
+            cat_item.setFont(0, _cat_font)
             cat_item.setForeground(0, QColor('#FF6B47'))
             for tpl in self._templates:
                 if tpl['category'] == cat:
