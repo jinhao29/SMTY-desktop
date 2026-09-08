@@ -214,6 +214,50 @@ class SingleTab(QWidget):
         mgr_row.addWidget(self.btn_del_block)
         left_lay.addLayout(mgr_row)
 
+        # ==================== 左列底部：操作区（v26.2 由右列融合而来） ====================
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet(f'color: {Palette.DIVIDER}; background: {Palette.DIVIDER}; max-height: 1px; border: none;')
+        left_lay.addSpacing(6)
+        left_lay.addWidget(sep)
+        left_lay.addSpacing(2)
+        op_title = QLabel('操作')
+        op_title.setStyleSheet(f'color: {Palette.TEXT}; font-size: 14px; font-weight: 600; background: transparent;')
+        left_lay.addWidget(op_title)
+
+        self.cb_format = QComboBox()
+        self.cb_format.addItems(['Excel (.xlsx)', 'Word (.docx)'])
+        left_lay.addWidget(self.cb_format)
+
+        self.btn_export = QPushButton('⤓ 导出', objectName='primary')
+        self.btn_export.setCursor(Qt.PointingHandCursor)
+        self.btn_export.setMinimumHeight(36)
+        left_lay.addWidget(self.btn_export)
+
+        self.btn_open = QPushButton('打开文件夹', objectName='secondary')
+        self.btn_open.setCursor(Qt.PointingHandCursor)
+        self.btn_open.setMinimumHeight(32)
+        left_lay.addWidget(self.btn_open)
+
+        self.btn_template = QPushButton('模板库', objectName='secondary')
+        self.btn_template.setCursor(Qt.PointingHandCursor)
+        self.btn_template.setMinimumHeight(32)
+        left_lay.addWidget(self.btn_template)
+
+        self.btn_send_phone = QPushButton('截图发到手机', objectName='secondary')
+        self.btn_send_phone.setCursor(Qt.PointingHandCursor)
+        self.btn_send_phone.setMinimumHeight(32)
+        left_lay.addWidget(self.btn_send_phone)
+
+        self.btn_help = QPushButton('？ 帮助', objectName='ghost')
+        self.btn_help.setCursor(Qt.PointingHandCursor)
+        self.btn_help.setStyleSheet(
+            'QPushButton { background: transparent; border: none; '
+            f'color: {Palette.TEXT_SUB}; padding: 4px 0; text-align: left; font-size: 12px; }}'
+            f'QPushButton:hover {{ color: {Palette.ACCENT}; }}'
+        )
+        left_lay.addWidget(self.btn_help)
+
         left_card.set_content_layout(left_lay)
         main_lay.addWidget(left_card)
 

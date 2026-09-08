@@ -5,7 +5,6 @@
 - TopNavBar：顶部导航栏（Logo + 标题 + 搜索 + 同步状态 + 教练下拉）
              独立运行 main() 时显示；嵌入 app.py 时由外层提供，本组件不重复渲染
 - ModuleHeader：模块标题头（页面标题 + 子页切换 + 新增按钮）
-- RightActionPanel：右列操作面板（导出格式 + 导出 + 打开文件夹 + 模板库 + 截图发到手机 + 帮助）
 - BottomStatusBar：底部状态栏（编辑状态）
 - SyncDot：同步状态圆点指示器
 
@@ -201,71 +200,6 @@ class ModuleHeader(QFrame):
             btn.setChecked(i == idx)
             btn.setStyleSheet(self._tab_qss(i == idx))
             btn.blockSignals(False)
-
-
-# ==================== 右列操作面板 ====================
-
-class RightActionPanel(Card):
-    """右列操作面板：导出格式 + 导出 + 打开文件夹 + 模板库 + 截图发到手机 + 帮助。
-
-    所有按钮为公开属性，由 main.py 接线到既有处理函数。
-    """
-    def __init__(self, parent=None):
-        super().__init__(title='操作', parent=parent)
-        lay = QVBoxLayout()
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(Spacing.MD)
-
-        # 导出格式下拉
-        hint = QLabel('导出格式')
-        hint.setFont(Type.caption())
-        hint.setStyleSheet(f'color: {Palette.TEXT_SUB}; background: transparent;')
-        lay.addWidget(hint)
-        self.cb_format = QComboBox()
-        self.cb_format.addItems(['Excel (.xlsx)', 'Word (.docx)'])
-        lay.addWidget(self.cb_format)
-
-        self.btn_export = QPushButton('⤓  导出')
-        self.btn_export.setObjectName('primary')
-        self.btn_export.setCursor(Qt.PointingHandCursor)
-        self.btn_export.setMinimumHeight(38)
-        lay.addWidget(self.btn_export)
-
-        lay.addSpacing(4)
-
-        self.btn_open = QPushButton('打开文件夹')
-        self.btn_open.setObjectName('secondary')
-        self.btn_open.setCursor(Qt.PointingHandCursor)
-        self.btn_open.setMinimumHeight(36)
-        lay.addWidget(self.btn_open)
-
-        self.btn_template = QPushButton('模板库')
-        self.btn_template.setObjectName('secondary')
-        self.btn_template.setCursor(Qt.PointingHandCursor)
-        self.btn_template.setMinimumHeight(36)
-        lay.addWidget(self.btn_template)
-
-        self.btn_send_phone = QPushButton('截图发到手机')
-        self.btn_send_phone.setObjectName('secondary')
-        self.btn_send_phone.setCursor(Qt.PointingHandCursor)
-        self.btn_send_phone.setMinimumHeight(36)
-        lay.addWidget(self.btn_send_phone)
-
-        lay.addStretch()
-
-        self.btn_help = QPushButton('？ 帮助')
-        self.btn_help.setObjectName('ghost')
-        self.btn_help.setCursor(Qt.PointingHandCursor)
-        self.btn_help.setStyleSheet(
-            f'QPushButton#ghost {{ background: transparent; border: none; '
-            f'color: {Palette.TEXT_SUB}; padding: 6px 0; text-align: left; font-size: 13px; }}'
-            f'QPushButton#ghost:hover {{ color: {Palette.ACCENT}; }}'
-        )
-        lay.addWidget(self.btn_help)
-
-        self.set_content_layout(lay)
-        # v26.1：定宽防挤压中列（按钮最长文案「截图发到手机」+ Card 内边距实测 176px 够用）
-        self.setFixedWidth(176)
 
 
 # ==================== 底部状态栏 ====================

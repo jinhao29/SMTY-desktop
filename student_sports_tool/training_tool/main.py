@@ -39,7 +39,7 @@ from ui_plan_screen import WeeklyTab
 # 新设计语言组件
 from styles import TRAINING_QSS, Palette, Spacing
 from layouts import (
-    TopNavBar, ModuleHeader, RightActionPanel, BottomStatusBar,
+    TopNavBar, ModuleHeader, BottomStatusBar,
 )
 
 # v25 新增：局域网训练计划截图发送器（截图 + HTTP + UDP 广播）
@@ -115,19 +115,20 @@ class MainWindow(QMainWindow):
         self.stack.currentChanged.connect(self._on_subtab_changed)
         body_lay.addWidget(self.stack, 1)
 
-        # 右列操作面板
-        self.right_panel = RightActionPanel()
-        # 接线到既有处理函数
-        self.right_panel.btn_export.clicked.connect(self._export_current)
-        self.right_panel.btn_open.clicked.connect(self._open_dir)
-        self.right_panel.btn_template.clicked.connect(self.on_open_template_library)
-        self.right_panel.btn_send_phone.clicked.connect(self._on_send_plan_to_phone)
-        self.right_panel.btn_help.clicked.connect(self._on_help)
+        # 操作区已融合进左列（v26.2）：控件在 SingleTab 左列底部，这里只接线
+        ts = self.tab_single
+        ts.btn_export.clicked.connect(self._export_current)
+        ts.btn_open.clicked.connect(self._open_dir)
+        ts.btn_template.clicked.connect(self.on_open_template_library)
+        ts.btn_send_phone.clicked.connect(self._on_send_plan_to_phone)
+        ts.btn_help.clicked.connect(self._on_help)
         # 兼容旧属性引用（_on_send_plan_to_phone / _init_lan_plan_sender 等仍用 self.btn_send_to_phone）
-        self.btn_send_to_phone = self.right_panel.btn_send_phone
-        self.btn_template = self.right_panel.btn_template
-        self.btn_open = self.right_panel.btn_open
-        body_lay.addWidget(self.right_panel)
+        self.btn_send_to_phone = ts.btn_send_phone
+        self.btn_template = ts.btn_template
+        self.btn_open = ts.btn_open
+        # 周计划页自带的导出/发送入口（周计划固定导 Excel；发送与单次页共用 sender）
+        self.tab_week.btn_export.clicked.connect(lambda: self._export('excel'))
+        self.tab_week.btn_send_phone.clicked.connect(self._on_send_plan_to_phone)
 
         content_lay.addWidget(body, 1)
 
@@ -167,8 +168,7 @@ class MainWindow(QMainWindow):
             names = ['单次训练单', '周计划表', '阶段总结']
             if 0 <= idx < len(names):
                 self.status_bar.set_status(f'就绪 · {names[idx]}')
-            # 阶段总结子页自带导出卡，外层操作面板对其冗余；隐藏后把宽度还给内容区
-            self.right_panel.setVisible(idx != 2)
+            # v26.2：右栏已融合进左列；周计划页有自己的导出/发送入口（见 WeeklyTab 工具行）
             if idx == 0 and hasattr(self, 'tab_single'):
                 self.tab_single.refresh_students()
             elif idx == 1 and hasattr(self, 'tab_week'):
@@ -181,8 +181,8 @@ class MainWindow(QMainWindow):
     # ==================== 导出（接线保持不变） ====================
 
     def _export_current(self):
-        """右列导出按钮：按导出格式下拉选择执行 Excel/Word 导出。"""
-        fmt = 'excel' if self.right_panel.cb_format.currentIndex() == 0 else 'word'
+        """导出按钮：按导出格式下拉选择执行 Excel/Word 导出（下拉在左列操作区）。"""
+        fmt = 'excel' if self.tab_single.cb_format.currentIndex() == 0 else 'word'
         self._export(fmt)
 
     def _export(self, fmt):
