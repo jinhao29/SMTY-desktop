@@ -402,7 +402,9 @@ class RowActionsDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
             painter.setPen(QColor(fg))
             painter.drawText(rect, Qt.AlignCenter, label)
-            painter.restore()
+        # restore 必须与循环外的 save() 一一对应：写在循环内时每行多按钮
+        # 会重复 restore，触发 "QPainter::restore: Unbalanced save/restore" 刷屏
+        painter.restore()
 
     def sizeHint(self, option, index):
         base = super().sizeHint(option, index)

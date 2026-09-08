@@ -146,6 +146,9 @@ class ScheduleAchievementPanel(QWidget):
         chl = QVBoxLayout(gb_chart)
         self.chart_view = QChartView()
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # 全局 QSS 的像素字号会让 QtCharts 内部 setPointSize 收到 -1 报警，
+        # 与 report_panel 同款：视图上用 pt 字号覆盖
+        self.chart_view.setStyleSheet('font-size: 10.5pt; background: #FFFFFF;')
         self.chart_view.setMinimumHeight(320)
         chl.addWidget(self.chart_view)
         splitter.addWidget(gb_chart)

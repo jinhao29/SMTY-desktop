@@ -20,7 +20,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 
 import config_manager
 import backup_coordinator
@@ -55,6 +55,7 @@ class AutoBackupWorker(QObject):
         self._timer.start()
         logger.info('自动备份调度器已启动，每日凌晨 4:00 触发')
 
+    @Slot()
     def stop(self):
         """停止定时器。"""
         if self._timer:
@@ -62,6 +63,7 @@ class AutoBackupWorker(QObject):
             self._timer.deleteLater()
             self._timer = None
 
+    @Slot()
     def trigger_now(self):
         """立即触发一次自动备份（外部主动调用，如恢复后）。
 
