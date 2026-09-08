@@ -349,7 +349,9 @@ class SingleTab(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        # v26.1：操作列固定宽（ResizeToContents 在窗口变窄时会被压缩，按钮文字竖排截断）
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
+        self.table.setColumnWidth(4, 84)
         self.table.setMinimumHeight(280)
         self.table.setAlternatingRowColors(True)
         cl.addWidget(self.table)
@@ -566,11 +568,12 @@ class SingleTab(QWidget):
             btn_del.setCursor(Qt.PointingHandCursor)
             btn_del.setStyleSheet(
                 f"QPushButton {{ background: transparent; border: 1px solid {Palette.RED}; "
-                f"color: {Palette.RED}; border-radius: 4px; padding: 4px 14px; "
+                f"color: {Palette.RED}; border-radius: 4px; padding: 4px 10px; "
                 f"font-size: 12px; font-weight: 500; min-height: 18px; }}"
                 f"QPushButton:hover {{ background: rgba(239, 68, 68, 0.08); }}"
                 f"QPushButton:pressed {{ background: rgba(239, 68, 68, 0.15); }}"
             )
+            btn_del.setMinimumWidth(60)
             btn_del.clicked.connect(lambda checked, row=i: self._delete_row_by_btn(row))
             self.table.setItem(i, 0, it_name)
             self.table.setItem(i, 1, it_sets)

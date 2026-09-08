@@ -264,7 +264,8 @@ class RightActionPanel(Card):
         lay.addWidget(self.btn_help)
 
         self.set_content_layout(lay)
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        # v26.1：定宽防挤压中列（按钮最长文案「截图发到手机」+ Card 内边距实测 176px 够用）
+        self.setFixedWidth(176)
 
 
 # ==================== 底部状态栏 ====================
