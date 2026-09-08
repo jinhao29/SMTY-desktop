@@ -2,6 +2,8 @@
 """测试训练任务工具：单次+周计划，Excel+Word"""
 import sys, io, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# exporter 依赖上级目录的 file_lock 模块
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 from task_model import SinglePlan, WeeklyPlan, Block, Task, DayPlan

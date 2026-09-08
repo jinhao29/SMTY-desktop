@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""训练任务编排模块样式令牌 + 作用域 QSS（灰白简约 · 蓝紫强调）。
+"""训练任务编排模块样式令牌 + 作用域 QSS（灰白简约 · 珊瑚橙强调）。
 
-设计语言（对齐图2）：
-- 背景 #F2F4F8 / 卡片 #FFFFFF / 圆角 12px / 轻微阴影
-- 主文字 #1A1A2E / 次文字 #6B7280 / 强调色 #5B6BF7
-- 标签 #F3F4F6 底 / #374151 字
+设计语言（v26 统一：对齐全局珊瑚橙设计系统，与 Android 端一致）：
+- 背景 #FFFFFF / 卡片 #FFFFFF / 圆角 12px / 轻微阴影
+- 主文字 #1A1A2E / 次文字 #6B7280 / 强调色 #FF6B47（珊瑚橙）
+- 按钮：胶囊形（radius 18）/ primary 橙底白字 / secondary 描边白底 hover 反色
 
-仅作用域 training_tool 模块根（#training_root），不污染全局珊瑚橙主题，
+仅作用域 training_tool 模块根（#training_root），不污染全局主题，
 其它业务模块（学员档案 / 体测档案 / 数据中心）视觉零影响。
 
 懒人说明：QSS 由 main.MainWindow 在根 widget 上 setStyleSheet，
@@ -23,11 +23,10 @@ class Palette:
     TEXT = '#1A1A2E'            # 主文字：深灰
     TEXT_SUB = '#6B7280'        # 次文字：中灰
     TEXT_TERTIARY = '#4A4A6A'   # 辅助色
-    ACCENT = '#5B6BF7'          # 强调色：蓝紫（按钮/链接/选中）
-    ACCENT_BLUE = '#3B82F6'     # 备选蓝
-    ACCENT_HOVER = '#4A5AE0'    # 强调色加深 10%（hover）
-    ACCENT_PRESSED = '#3B4AC8'  # pressed
-    ACCENT_LIGHT = '#EEF0FE'    # 选中态浅背景
+    ACCENT = '#FF6B47'          # 强调色：珊瑚橙（与全局/Android 端统一，v26）
+    ACCENT_HOVER = '#F5582F'    # 强调色加深（hover）
+    ACCENT_PRESSED = '#E04D28'  # pressed
+    ACCENT_LIGHT = '#FFF1EC'    # 选中态浅橙背景
     DIVIDER = '#E5E7EB'         # 分割线
     BORDER = '#E5E7EB'          # 通用边框
     TAG_BG = '#F3F4F6'          # 标签背景
@@ -43,8 +42,8 @@ class Palette:
 
 class Radius:
     CARD = 12
-    BUTTON = 8
-    TAG = 6
+    BUTTON = 18    # 胶囊按钮（对齐全局视觉规范）
+    TAG = 10
     PILL = 20
     SMALL = 6
 
@@ -195,20 +194,24 @@ TRAINING_QSS = f"""
 #training_root QPushButton#primary:hover {{ background: {Palette.ACCENT_HOVER}; }}
 #training_root QPushButton#primary:pressed {{ background: {Palette.ACCENT_PRESSED}; }}
 #training_root QPushButton#secondary {{
-    background: transparent; border: 1px solid {Palette.DIVIDER}; color: {Palette.ACCENT};
+    background: #FFFFFF; border: 1px solid {Palette.TEXT}; color: {Palette.TEXT};
 }}
 #training_root QPushButton#secondary:hover {{
-    background: {Palette.ACCENT_LIGHT}; border: 1px solid {Palette.ACCENT};
+    background: {Palette.TEXT}; color: #FFFFFF; border: 1px solid {Palette.TEXT};
 }}
-#training_root QPushButton#secondary:pressed {{ background: #E0E3FB; }}
+#training_root QPushButton#secondary:pressed {{ background: #33334D; }}
 #training_root QPushButton#danger {{
     background: transparent; border: 1px solid #FECACA; color: {Palette.RED};
 }}
-#training_root QPushButton#danger:hover {{ background: #FEF2F2; border: 1px solid {Palette.RED}; }}
-#training_root QPushButton#recommend {{
-    background: {Palette.ACCENT_BLUE}; color: #FFFFFF;
+#training_root QPushButton#danger:hover {{
+    background: {Palette.RED}; color: #FFFFFF; border: 1px solid {Palette.RED};
 }}
-#training_root QPushButton#recommend:hover {{ background: #2F72E0; }}
+#training_root QPushButton#danger:pressed {{ background: #DC2626; }}
+#training_root QPushButton#recommend {{
+    background: {Palette.ACCENT}; color: #FFFFFF;
+}}
+#training_root QPushButton#recommend:hover {{ background: {Palette.ACCENT_HOVER}; }}
+#training_root QPushButton#recommend:pressed {{ background: {Palette.ACCENT_PRESSED}; }}
 #training_root QPushButton#small {{
     padding: 5px 12px; min-height: 18px; font-size: 12px; font-weight: 500;
 }}

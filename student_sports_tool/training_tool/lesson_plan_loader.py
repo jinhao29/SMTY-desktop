@@ -255,6 +255,124 @@ def recommend_single_lesson(age_group: str,
     return lessons[pick_index % len(lessons)]
 
 
+def _dedup(items: List[str]) -> List[str]:
+    """去重并保持顺序。"""
+    return list(dict.fromkeys(items))
+
+
+def build_random_lesson(age_group: str,
+                        plans: Optional[Dict[str, List[LessonSection]]] = None,
+                        rng=None) -> Optional[LessonSection]:
+    """从该年龄段全部教案中随机抽取动作，合成一节随机搭配课。
+
+    合成规则（贴合教案"准备/教学/结束"分段任务设计，强度水平与年龄段一致）：
+    - 热身：该年龄段所有节热身动作池随机抽 3-4 个
+    - 主项：按教学类别（绳梯类/垫上类/踏板/哑铃壶铃类…）聚合动作池，
+      随机选 2-3 类，每类随机抽 2-3 个动作；目的/时间/组次/器材随该类别样本
+    - 放松：结束部分动作池随机抽 2-3 个
+    - 核心内容：随机取一节教案的核心内容（保证训练目标完整合理）
+    - 循环组合类长文本（如"综合循环"）整块保留，不拆散
+
+    返回合成的 LessonSection；该年龄段无教案时返回 None。
+    """
+    import random
+    if rng is None:
+        rng = random
+    if plans is None:
+        plans = load_all_plans()
+    lessons = plans.get(age_group, [])
+    if not lessons:
+        return None
+
+    def _numbered(items: List[str]) -> str:
+        return '\n'.join(f'{i+1}.{x}' for i, x in enumerate(items))
+
+    # --- 热身池 ---
+    warm_pool = _dedup(
+        [m for l in lessons for m in parse_exercises_to_list(l.warmup.exercises)])
+    warm_pick = rng.sample(warm_pool, min(len(warm_pool), rng.randint(3, 4))) if warm_pool else []
+
+    # --- 主项：按类别聚合动作池 ---
+    # category -> {'purposes': [...], 'moves': [...], 'samples': [MainSection]}
+    cat_map: Dict[str, dict] = {}
+    for l in lessons:
+        for sec in l.main_sections:
+            if not sec.category:
+                continue
+            bucket = cat_map.setdefault(
+                sec.category, {'purposes': [], 'moves': [], 'samples': []})
+            if sec.purpose and sec.purpose not in bucket['purposes']:
+                bucket['purposes'].append(sec.purpose)
+            items = parse_exercises_to_list(sec.exercises)
+            if len(items) >= 5:
+                # 循环组合类长文本（跨器械串联），整块保留避免拆散语义
+                bucket['moves'].append(f'循环组合：{sec.exercises}')
+            else:
+                bucket['moves'].extend(items)
+            bucket['samples'].append(sec)
+
+    main_sections: List[MainSection] = []
+    if cat_map:
+        cats = rng.sample(
+            sorted(cat_map), min(len(cat_map), rng.randint(2, 3)))
+        for cat in cats:
+            bucket = cat_map[cat]
+            moves = _dedup(bucket['moves'])
+            pick = rng.sample(moves, min(len(moves), rng.randint(2, 3)))
+            sample = rng.choice(bucket['samples'])
+            main_sections.append(MainSection(
+                category=cat,
+                purpose=rng.choice(bucket['purposes']) if bucket['purposes'] else '',
+                exercises=_numbered(pick),
+                duration=sample.duration or '10min',
+                sets=sample.sets,
+                equipment=sample.equipment,
+                note=sample.note if rng.random() < 0.5 else '',
+            ))
+
+    # --- 放松池 ---
+    cool_pool = _dedup(
+        [m for l in lessons for m in parse_exercises_to_list(l.cooldown.exercises)])
+    cool_pick = rng.sample(cool_pool, min(len(cool_pool), rng.randint(2, 3))) if cool_pool else []
+
+    if not warm_pick and not main_sections and not cool_pick:
+        return None
+
+    # 核心内容：随机取一节（保证训练目标表述合理）
+    src = rng.choice(lessons)
+
+    total = 0
+    for d in [s.duration for s in main_sections]:
+        m = re.search(r'(\d+)', d or '')
+        if m:
+            total += int(m.group(1))
+    total = total + 10 + 5 if total else 60  # 主项 + 热身10 + 放松5
+
+    return LessonSection(
+        title=f'{age_group}随机搭配课',
+        age_group=age_group,
+        core_content=src.core_content,
+        warmup=MainSection(
+            category='准备部分',
+            purpose=lessons[0].warmup.purpose or '做好运动前的准备',
+            exercises=_numbered(warm_pick),
+            duration='10min',
+            sets=lessons[0].warmup.sets,
+            equipment=lessons[0].warmup.equipment,
+        ),
+        main_sections=main_sections,
+        cooldown=MainSection(
+            category='结束部分',
+            purpose=lessons[0].cooldown.purpose or '放松拉伸+恢复疲劳',
+            exercises=_numbered(cool_pick),
+            duration='5min',
+            sets=lessons[0].cooldown.sets,
+            equipment=lessons[0].cooldown.equipment,
+        ),
+        total_duration=total,
+    )
+
+
 def lesson_to_day_plan(lesson: LessonSection) -> dict:
     """将 LessonSection 转换为 DayPlan 兼容的字典格式（供 WeeklyTab 填充）。"""
     # 教学部分：每个类别一块，用 --- 分隔（与 exporter 的 main_content 拆分逻辑一致）

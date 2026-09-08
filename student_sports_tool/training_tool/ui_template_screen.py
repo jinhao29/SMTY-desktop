@@ -651,36 +651,21 @@ class SingleTab(QWidget):
         self.cb_name.blockSignals(False)
 
     def on_recommend_single(self):
-        """智能推荐：根据学员年龄自动匹配教案并填充训练内容（委托 plan_coordinator）。"""
+        """智能推荐：按学员年龄段教案池随机搭配生成训练内容（委托 plan_coordinator）。
+
+        每次点击从该年龄段全部教案的各时间段任务池（热身/教学类别/放松）
+        随机抽取动作搭配，连续排课不重样；生成后可自由修改。
+        """
         name = self.cb_name.currentText().strip()
         archive_dir = self._get_dir() or ''
-        result = plan_coordinator.recommend_single_plan(name, archive_dir)
+        result = plan_coordinator.recommend_random_single(name, archive_dir)
         if not result.get('ok'):
-            msg = result.get('reason', '推荐失败')
-            code = result.get('code', '')
-            if code in ('no_name', 'no_dir', 'no_module'):
-                dialog.warn(self, '提示', msg)
-            else:
-                dialog.warn(self, '提示', msg)
+            dialog.warn(self, '提示', result.get('reason', '推荐失败'))
             return
 
         age = result['age']
         age_group = result['age_group']
-        lessons = result['lessons']
-
-        if len(lessons) == 1:
-            lesson = lessons[0]
-        else:
-            items = [f'第{i+1}节：{l.title or "训练课"}' for i, l in enumerate(lessons)]
-            choice, ok = QInputDialog.getItem(
-                self, '选择教案',
-                f'学员「{name}」年龄 {age} 岁 → {age_group}\n请选择本次课对应的教案：',
-                items, 0, False
-            )
-            if not ok:
-                return
-            idx = items.index(choice)
-            lesson = lessons[idx]
+        lesson = result['lesson']
 
         if lesson.core_content:
             self.le_goal.setText(lesson.core_content)
@@ -697,7 +682,10 @@ class SingleTab(QWidget):
         self._refresh_blocks()
         dialog.info(
             self, '推荐成功',
-            f'已为学员「{name}」（{age}岁 / {age_group}）填充教案：\n'
-            f'{lesson.title or "训练课"}\n\n'
-            f'可在此基础上自由修改训练内容。'
+            f'已为学员「{name}」（{age}岁 / {age_group}）随机搭配训练课：\n'
+            f'{lesson.title} · 共{lesson.total_duration}分钟\n'
+            f'热身{len(new_blocks[0].tasks)}项 / '
+            f'主项{len(new_blocks[1].tasks)}项 / '
+            f'放松{len(new_blocks[2].tasks)}项\n\n'
+            f'再次点击「智能推荐」可重新随机搭配，可在此基础上自由修改。'
         )

@@ -70,6 +70,33 @@ def load_initial_blocks():
 
 # ===== 智能推荐：单次训练单 =====
 
+def _resolve_student_age_group(name: str, archive_dir: str):
+    """读取学员年龄并映射年龄段（推荐公共前置）。
+
+    返回:
+        {'ok': True, 'age': int, 'age_group': str}
+        {'ok': False, 'reason': str, 'code': str}  code: no_name/no_dir/no_module/no_age/no_age_group/no_plans
+    """
+    if not name:
+        return {'ok': False, 'reason': '请先选择或输入学员姓名', 'code': 'no_name'}
+    if not archive_dir:
+        return {'ok': False, 'reason': '档案目录未设置，无法读取学员年龄', 'code': 'no_dir'}
+    try:
+        import lesson_plan_loader as lpl
+    except ImportError:
+        return {'ok': False, 'reason': '教案加载模块缺失', 'code': 'no_module'}
+    age = lpl.get_student_age(name, archive_dir)
+    if age is None or age <= 0:
+        return {
+            'ok': False, 'code': 'no_age',
+            'reason': f'未找到学员「{name}」的年龄信息，请先在「学员档案」中完善',
+        }
+    age_group = lpl.age_to_group(age)
+    if not age_group:
+        return {'ok': False, 'reason': '无法确定学员年龄段', 'code': 'no_age_group'}
+    return {'ok': True, 'age': age, 'age_group': age_group}
+
+
 def recommend_single_plan(name: str, archive_dir: str):
     """根据学员年龄匹配教案，生成单次训练单的 Block 列表。
 
@@ -91,26 +118,14 @@ def recommend_single_plan(name: str, archive_dir: str):
                 'no_name' / 'no_dir' / 'no_module' / 'no_age'
                 'no_age_group' / 'no_plans' / 'no_lessons' / 'convert_failed'
     """
-    if not name:
-        return {'ok': False, 'reason': '请先选择或输入学员姓名', 'code': 'no_name'}
-    if not archive_dir:
-        return {'ok': False, 'reason': '档案目录未设置，无法读取学员年龄', 'code': 'no_dir'}
+    pre = _resolve_student_age_group(name, archive_dir)
+    if not pre.get('ok'):
+        return pre
+    age, age_group = pre['age'], pre['age_group']
     try:
         import lesson_plan_loader as lpl
     except ImportError:
         return {'ok': False, 'reason': '教案加载模块缺失', 'code': 'no_module'}
-
-    # 1. 读取学员年龄
-    age = lpl.get_student_age(name, archive_dir)
-    if age is None or age <= 0:
-        return {
-            'ok': False, 'code': 'no_age',
-            'reason': f'未找到学员「{name}」的年龄信息，请先在「学员档案」中完善',
-        }
-    # 2. 年龄 → 年龄段
-    age_group = lpl.age_to_group(age)
-    if not age_group:
-        return {'ok': False, 'reason': '无法确定学员年龄段', 'code': 'no_age_group'}
     # 3. 加载教案
     try:
         plans = lpl.load_all_plans()
@@ -128,6 +143,35 @@ def recommend_single_plan(name: str, archive_dir: str):
         # 默认指向第一节，由 UI 决定是否让用户选择
         'lesson': lessons[0],
     }
+
+
+def recommend_random_single(name: str, archive_dir: str):
+    """智能推荐（随机搭配版）：按学员年龄段教案池随机合成一节训练课。
+
+    与 recommend_single_plan 的区别：不取整节教案，而是从该年龄段
+    全部教案的各时间段任务池（热身/教学类别/放松）随机抽取动作搭配，
+    每次点击生成不同组合，方便连续排课不重样。
+
+    返回:
+        dict:
+            {'ok': True, 'age': int, 'age_group': str, 'lesson': LessonSection}
+            {'ok': False, 'reason': str, 'code': str}
+    """
+    pre = _resolve_student_age_group(name, archive_dir)
+    if not pre.get('ok'):
+        return pre
+    age, age_group = pre['age'], pre['age_group']
+    try:
+        import lesson_plan_loader as lpl
+    except ImportError:
+        return {'ok': False, 'reason': '教案加载模块缺失', 'code': 'no_module'}
+    try:
+        lesson = lpl.build_random_lesson(age_group)
+    except Exception as e:
+        return {'ok': False, 'reason': f'随机搭配失败：\n{e}', 'code': 'no_plans'}
+    if lesson is None:
+        return {'ok': False, 'reason': f'未找到「{age_group}」的教案模板', 'code': 'no_lessons'}
+    return {'ok': True, 'age': age, 'age_group': age_group, 'lesson': lesson}
 
 
 def lesson_to_blocks(lesson):

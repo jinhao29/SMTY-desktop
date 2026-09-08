@@ -213,7 +213,7 @@ class StageSummaryScreen(QWidget):
 
         # 统计卡竖排（v24：2x2 在 ~240px 窄栏里每张不足百像素太挤，1x4 全宽更从容）
         self.stat_lessons = StatCard(IconBox.CALENDAR, '阶段消课', '—', Palette.ACCENT)
-        self.stat_feedback = StatCard(IconBox.CHART_BAR, '反馈条数', '—', Palette.ACCENT_BLUE)
+        self.stat_feedback = StatCard(IconBox.CHART_BAR, '反馈条数', '—', Palette.ACCENT)
         self.stat_score = StatCard(IconBox.CHART_LINE, '成绩变化', '—', Palette.GREEN)
         self.stat_remaining = StatCard(IconBox.ARCHIVE, '剩余课时', '—', Palette.ACCENT)
         for _stat in (self.stat_lessons, self.stat_feedback,
