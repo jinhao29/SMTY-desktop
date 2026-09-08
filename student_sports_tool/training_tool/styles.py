@@ -13,6 +13,43 @@
 widget 级样式表优先级高于 QApplication 级，故内部选择器无需与全局争抢特异性。
 """
 from PySide6.QtGui import QFont, QColor
+import os as _os
+
+
+def _ensure_combo_arrow_icon():
+    """生成下拉框箭头 chevron SVG，返回其绝对路径（正斜杠，QSS image:url 可用）。
+
+    border-triangle / image:none 两种 QSS 画法在本机 Qt 都渲染异常
+    （实心小方块 / 无箭头），与 theme.py 勾选框对勾同款方案：运行时写
+    SVG 到 ~/.shangmentiyu/ui_assets/，QSS image:url 引用。
+    生成失败返回 ''，QSS 回退交还原生箭头。
+    """
+    try:
+        user_dir = _os.path.join(_os.path.expanduser('~'), '.shangmentiyu', 'ui_assets')
+        _os.makedirs(user_dir, exist_ok=True)
+        path = _os.path.join(user_dir, 'combobox_chevron.svg')
+        if not _os.path.exists(path):
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(
+                    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'>"
+                    "<path d='M2.5 4.2 6 7.8 9.5 4.2' fill='none' stroke='#6B7280' "
+                    "stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+        return path.replace('\\', '/')
+    except OSError:
+        return ''
+
+
+_COMBO_ARROW_SVG = _ensure_combo_arrow_icon()
+
+# image:url 规则条件拼接（空路径时拼空串，避免 QSS 空 url 破坏语法——theme.py 同款处理）
+# 注意：本串经 {变量} 插入 f-string，不会再做 format 转义，必须用单层大括号
+_COMBO_ARROW_RULE = (
+    "#training_root QComboBox::down-arrow {\n"
+    "    image: url(%s); width: 12px; height: 12px; margin-right: 7px;\n"
+    "}\n" % _COMBO_ARROW_SVG
+) if _COMBO_ARROW_SVG else (
+    "/* 箭头 SVG 生成失败：交还原生箭头 */\n"
+)
 
 
 # ==================== 色彩令牌 ====================
@@ -163,10 +200,7 @@ TRAINING_QSS = f"""
     color: {Palette.MUTED};
 }}
 #training_root QComboBox::drop-down {{ border: none; width: 24px; }}
-#training_root QComboBox::down-arrow {{
-    image: none; border-left: 5px solid transparent; border-right: 5px solid transparent;
-    border-top: 6px solid {Palette.TEXT_SUB}; margin-right: 8px;
-}}
+{_COMBO_ARROW_RULE}
 #training_root QComboBox QAbstractItemView {{
     background: {Palette.CARD}; border: 1px solid {Palette.DIVIDER};
     border-radius: {Radius.BUTTON}px; color: {Palette.TEXT};
