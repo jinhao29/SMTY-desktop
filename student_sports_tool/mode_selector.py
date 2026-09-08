@@ -8,6 +8,7 @@
 
 俱乐部端尚未建设（占位）：选中后提示"建设中"，留在选择页。
 """
+import os
 import sys
 
 from PySide6.QtCore import Qt, QRectF, QPointF
@@ -133,7 +134,7 @@ class ModeSelector(QDialog):
         self._cards = [
             ModeCard('上门体育', '学员档案 · 课时排课 · 财务记账 · 数据中心',
                      '常用', PRIMARY, 'stopwatch'),
-            ModeCard('俱乐部', 'EVOLVE 进化体育 · 会员与课程运营（建设中）',
+            ModeCard('俱乐部', 'EVOLVE 进化体育 · 独立数据空间，与上门体育完全隔离',
                      'NEW', '#10B981', 'bolt'),
         ]
         for c in self._cards:
@@ -165,21 +166,59 @@ class ModeSelector(QDialog):
         self.accept()
 
 
-def run_selector() -> str:
-    """独立入口：弹出选择页，返回 'coaching' / 'club' / None。
+# ============================================================
+# 模式持久化 + 俱乐部数据目录（v23.12 多租户·物理隔离）
+# ============================================================
 
-    俱乐部端建设中：提示后返回 None（本次退出）。
+_MODE_FILE = os.path.join(os.path.expanduser('~'), '.shangmentiyu', 'app_mode.json')
+
+
+def club_archive_dir() -> str:
+    """俱乐部档案目录（单俱乐部阶段：Desktop\\学员档案俱乐部）。
+
+    与上门体育的 Desktop\\学员档案 平级，物理隔离零串库。
+    """
+    return os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案俱乐部')
+
+
+def ensure_club_dir() -> str:
+    """确保俱乐部目录存在（首次自动创建；xlsx 骨架由各 storage 的 ensure 逻辑按需建）。"""
+    d = club_archive_dir()
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def load_last_mode() -> str:
+    """上次使用的模式（'coaching' / 'club'；无记录返回 'coaching'）。"""
+    try:
+        import json
+        with open(_MODE_FILE, encoding='utf-8') as f:
+            return json.load(f).get('mode') or 'coaching'
+    except Exception:
+        return 'coaching'
+
+
+def save_mode(mode: str):
+    try:
+        import json
+        os.makedirs(os.path.dirname(_MODE_FILE), exist_ok=True)
+        with open(_MODE_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'mode': mode}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def run_selector() -> str:
+    """独立入口：弹出选择页，返回 'coaching' / 'club' / None(退出)。
+
+    俱乐部模式 = 独立档案目录（ensure_club_dir 自动创建）跑同一套功能，
+    数据与上门体育完全隔离（v23.12 多租户·物理隔离）。
     """
     app = QApplication.instance() or QApplication(sys.argv)
     import theme
     app.setStyleSheet(theme.LIGHT_QSS)
     dlg = ModeSelector()
     dlg.exec()
-    if dlg.choice == 'club':
-        from PySide6.QtWidgets import QMessageBox
-        QMessageBox.information(dlg, '提示',
-                                '俱乐部模块建设中，敬请期待。\n当前版本请使用「上门体育」。')
-        return None
     return dlg.choice
 
 

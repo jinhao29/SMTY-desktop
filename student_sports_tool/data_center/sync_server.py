@@ -256,6 +256,19 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
                       level='ERROR')
             return False, reason, 0
 
+        # v23.12 多租户防串库：备份 zip 的工作模式必须与 PC 当前模式一致
+        # （手机在俱乐部模式备的库绝不能合并进上门体育档案目录，反之亦然）
+        try:
+            from data_center.mode_guard import check_backup_mode
+            ok, reason = check_backup_mode(zip_path, self.archive_dir)
+        except Exception as e:
+            ok, reason = True, ''
+            self._log('租户校验异常（放行）：%s' % e, level='WARN')
+        if not ok:
+            self._log('租户校验拒绝：%s（%s）' % (os.path.basename(zip_path), reason),
+                      level='ERROR')
+            return False, reason, 0
+
         def on_progress(msg: str):
             self._log('  [合并] %s' % msg)
 
@@ -305,6 +318,9 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Disposition',
                              'attachment; filename="students_sync.xlsx"')
             self.send_header('Content-Length', str(len(data)))
+            # v23.12：告知手机本机工作模式，手机端据此防串库
+            from data_center.mode_guard import dir_mode
+            self.send_header('X-Workspace-Mode', dir_mode(self.archive_dir))
             self.end_headers()
             self.wfile.write(data)
             self._log('学员同步包已下发：%d 名学员（%d bytes）' % (count, len(data)))
@@ -372,10 +388,12 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         try:
             from lesson_manager import get_summary, get_detail, _norm_date as lm_norm_date
             from fee_manager import get_payments
+            from data_center.mode_guard import dir_mode
             # 纯明细口径：手机端拉取对账只认课时明细，PC「手机已消」列不回灌
             summaries = get_summary(self.archive_dir, use_phone_used=False)
             details = get_detail(self.archive_dir)
             payments = get_payments(self.archive_dir)
+            ws_mode = dir_mode(self.archive_dir)
         except Exception as e:
             self._log('PC 数据导出失败：%s' % e, level='ERROR')
             self._send_json(500, {'code': 1, 'message': 'export failed: %s' % e})
@@ -413,6 +431,8 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         self._send_json(200, {
             'code': 0,
             'generatedAt': int(time.time() * 1000),
+            # v23.12：本机工作模式随数据下发，手机端据此防串库
+            'workspaceMode': ws_mode,
             'packages': packages,
             'lessons': lessons,
             'fees': fees,

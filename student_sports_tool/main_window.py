@@ -34,13 +34,14 @@ DEFAULT_DIR = os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案')
 class MainWindow(QMainWindow):
     """学员体测档案管理主窗口。"""
 
-    def __init__(self):
+    def __init__(self, initial_dir: str = None):
         super().__init__()
         self.setWindowTitle('学员体测档案管理工具')
         self.resize(1100, 820)
         self._cur_stds = []          # 当前标准列表
         self._scoring = False        # 评分中标志，防止递归
-        self._dir_path = DEFAULT_DIR  # 档案目录
+        # v23.12：支持启动模式指定档案目录（俱乐部模式 = 独立目录，物理隔离）
+        self._dir_path = initial_dir or DEFAULT_DIR  # 档案目录
         self._loading_meta = False    # 加载已有学员信息时屏蔽响应
         self._init_ui()
         self.on_type_changed(0)

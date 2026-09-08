@@ -127,9 +127,12 @@ class App(QMainWindow):
     # v23.11：同步服务线程回调 → UI 线程桥（手机备份合并成功等）
     syncMergeOk = Signal(str)
 
-    def __init__(self):
+    def __init__(self, mode: str = 'coaching'):
         super().__init__()
-        self.setWindowTitle('上门体育教学管理平台')
+        # v23.12：工作模式（'coaching' 上门体育 / 'club' 俱乐部）。
+        # 俱乐部模式 = 独立档案目录（物理隔离），业务层零改动。
+        self.mode = mode
+        self.setWindowTitle('俱乐部管理平台' if mode == 'club' else '上门体育教学管理平台')
         # 根据屏幕可用尺寸自适应设置窗口初始大小
         screen = QApplication.primaryScreen()
         if screen is not None:
@@ -162,7 +165,9 @@ class App(QMainWindow):
             ('财务管理', PAGE_FINANCE, IconBox.CHART_LINE),
             ('数据中心', PAGE_DATA_CENTER, IconBox.ARCHIVE),
         ]
-        self.side_nav = SideNav(menu_items, title='上门体育')
+        self.side_nav = SideNav(
+            menu_items,
+            title='俱乐部' if mode == 'club' else '上门体育')
         self.side_nav.navChanged.connect(self._on_page_changed)
         self.side_nav.searchSubmitted.connect(self._on_global_search)
         self.side_nav.helpRequested.connect(self._on_help)
@@ -186,7 +191,12 @@ class App(QMainWindow):
 
         # === 创建各业务页面并加入 QStackedWidget ===
         # 注意：archive_win 必须先创建，因为其他页面依赖 archive_dir_getter
-        self.archive_win = archive_mod.MainWindow()
+        # v23.12：俱乐部模式传入独立档案目录（数据物理隔离）
+        if mode == 'club':
+            from mode_selector import ensure_club_dir
+            self.archive_win = archive_mod.MainWindow(initial_dir=ensure_club_dir())
+        else:
+            self.archive_win = archive_mod.MainWindow()
         archive_widget = self.archive_win.takeCentralWidget()
 
         # Page 0：首页（概览数据直接读档案目录，不再依赖占位）
@@ -656,11 +666,13 @@ def main():
     app.setStyleSheet(GLOBAL_QSS)
     _f = QFont('Inter'); _f.setPointSize(10)
     app.setFont(_f)
-    # 启动模式选择：上门体育 / 俱乐部（v23.12，俱乐部端建设中）
-    from mode_selector import run_selector
-    if run_selector() != 'coaching':
+    # 启动模式选择：上门体育 / 俱乐部（v23.12，俱乐部数据独立目录物理隔离）
+    from mode_selector import run_selector, save_mode
+    mode = run_selector()
+    if mode is None:
         sys.exit(0)
-    w = App()
+    save_mode(mode)
+    w = App(mode=mode)
     w.show()
     # 主窗口显示后初始化托盘与自动同步
     w._setup_tray_and_sync()
