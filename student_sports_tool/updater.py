@@ -121,21 +121,25 @@ def get_current_version() -> str:
     """返回当前桌面端版本号。
 
     优先级：
-    1. 同目录 VERSION 文件（开发者可手动维护）
-    2. updater.__VERSION__ 硬编码
+    1. exe/源码同目录 VERSION 文件（版本真源，make_release 打包时随 zip 分发）
+    2. 打包模式 exe 旁 _internal/VERSION（PyInstaller datas 落点，兜底）
+    3. updater.__VERSION__ 硬编码
     """
     here = os.path.dirname(os.path.abspath(__file__))
     if getattr(sys, 'frozen', False):
         here = os.path.dirname(sys.executable)
-    version_file = os.path.join(here, 'VERSION')
-    if os.path.exists(version_file):
-        try:
-            with open(version_file, 'r', encoding='utf-8') as f:
-                v = f.read().strip()
-                if v:
-                    return v
-        except OSError:
-            pass
+    candidates = [os.path.join(here, 'VERSION')]
+    if getattr(sys, 'frozen', False):
+        candidates.append(os.path.join(here, '_internal', 'VERSION'))
+    for version_file in candidates:
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    v = f.read().strip()
+                    if v:
+                        return v
+            except OSError:
+                pass
     return __VERSION__
 
 

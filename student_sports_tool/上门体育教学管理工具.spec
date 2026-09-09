@@ -39,6 +39,8 @@ UPX_DIR = os.path.dirname(UPX_EXE) if UPX_EXE else None
 
 # 数据资源（非 .py 文件）：(源相对路径, 目标目录)
 datas = [
+    # 版本真源：运行时 updater.get_current_version 从 exe 同目录读取
+    ('VERSION', '.'),
     ('training_tool\\blocks_config.json', 'training_tool'),
     ('training_tool\\demo_weekly_plan_4-6岁.docx', 'training_tool'),
     ('training_tool\\demo_weekly_plan_4-6岁.xlsx', 'training_tool'),

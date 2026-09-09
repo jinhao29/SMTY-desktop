@@ -58,3 +58,6 @@ student_sports_tool/_ui_fix_preview/
 sync_audit_*.html
 tech_review_*.html
 top_whitespace_audit_report.html
+
+# 发版打包产物（make_release.py 输出，上传 GitHub Release 用，不入库）
+student_sports_tool/release/
