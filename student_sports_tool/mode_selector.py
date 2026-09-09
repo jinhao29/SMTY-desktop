@@ -20,7 +20,9 @@ from PySide6.QtWidgets import (
     QWidget
 )
 
-PRIMARY = '#FF6B47'
+PRIMARY = '#10B981'      # EVOLVE 绿
+PRIMARY_HOVER = '#0EA371'
+SELECTED_BG = '#F0FBF6'  # 选中浅绿底
 TEXT = '#1A1A1A'
 TEXT_MUTED = '#9B9B9B'
 BORDER = '#E5E5E5'
@@ -80,7 +82,7 @@ class ModeCard(QWidget):
         card = QRectF(r).adjusted(0.5, 0.5, -0.5, -0.5)
         p.setPen(QPen(QColor(PRIMARY if selected else BORDER),
                       2 if selected else 1))
-        p.setBrush(QColor('#FFF7F4' if selected else '#FFFFFF'))
+        p.setBrush(QColor(SELECTED_BG if selected else '#FFFFFF'))
         p.drawRoundedRect(card, 16, 16)
         # 右上角圆形图标（直径 34）
         cx, cy, rad = r.width() - 40, 36, 17
@@ -137,7 +139,7 @@ class ModeSelector(QDialog):
             ModeCard('上门体育', '学员档案 · 课时排课 · 财务记账 · 数据中心',
                      '常用', PRIMARY, 'stopwatch'),
             ModeCard('俱乐部', 'EVOLVE 进化体育 · 独立数据空间，与上门体育完全隔离',
-                     'NEW', '#10B981', 'bolt'),
+                     'NEW', '#047857', 'bolt'),
         ]
         for c in self._cards:
             row.addWidget(c, 1)
@@ -162,12 +164,17 @@ class ModeSelector(QDialog):
         self._anims = []
 
     def _set_enter_enabled(self, enabled: bool):
-        """进入按钮：未选中模式前置灰（内联样式覆盖 #primary QSS）。"""
+        """进入按钮：未选中模式前置灰；选中后白绿主色（内联覆盖全局 #primary 橙）。"""
+        if enabled:
+            self.btn_enter.setStyleSheet(
+                f'QPushButton {{ background: {PRIMARY}; color: #FFFFFF; }}'
+                f'QPushButton:hover {{ background: {PRIMARY_HOVER}; }}'
+            )
+        else:
+            self.btn_enter.setStyleSheet(
+                f'background: {BORDER}; color: #B9B9B9;'
+            )
         self.btn_enter.setEnabled(enabled)
-        self.btn_enter.setStyleSheet(
-            '' if enabled else
-            f'background: {BORDER}; color: #B9B9B9;'
-        )
 
     def showEvent(self, ev):
         super().showEvent(ev)
