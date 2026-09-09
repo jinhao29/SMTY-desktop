@@ -33,12 +33,12 @@ def test_read_version_invalid(tmp_path, monkeypatch):
 
 def test_sha256_sidecar_matches_updater_contract(tmp_path):
     """侧车格式必须能被 updater._fetch_sidecar_sha256 的解析规则读回。"""
-    zip_path = tmp_path / make_release.ZIP_NAME
+    zip_path = tmp_path / make_release.zip_name_for("v1.0.0")
     payload = b'fake zip bytes'
     zip_path.write_bytes(payload)
     digest = make_release.make_sha256(str(zip_path))
     assert digest == hashlib.sha256(payload).hexdigest()
-    sidecar = (tmp_path / (make_release.ZIP_NAME + '.sha256')).read_text(encoding='utf-8')
+    sidecar = (tmp_path / (make_release.zip_name_for("v1.0.0") + ".sha256")).read_text(encoding='utf-8')
     m = re.search(r'[0-9a-f]{64}', sidecar, re.I)
     assert m and m.group(0).lower() == digest
 

@@ -24,9 +24,17 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SPEC = '上门体育教学管理工具.spec'
-ZIP_NAME = '上门体育教学管理工具.zip'
-DIST_APP = os.path.join(HERE, 'dist', 'app')
 RELEASE_DIR = os.path.join(HERE, 'release')
+
+
+def zip_name_for(version: str) -> str:
+    """Release 资产名用 ASCII（带版本号）。
+
+    GitHub 对中文 asset 名的 gh 上传/PATCH 处理不稳定（实测中文名被清洗成
+    default.zip）。updater 精确匹配失败后会模糊匹配 *.zip，侧车名按
+    <asset>.sha256 动态拼接，故 ASCII 命名对更新链路完全透明。
+    """
+    return f'shangmen-tool-{version}.zip'
 
 
 def fail(msg):
@@ -54,9 +62,9 @@ def run_build():
         fail(f'{DIST_APP} 中未见主 exe')
 
 
-def make_zip():
+def make_zip(zip_name):
     os.makedirs(RELEASE_DIR, exist_ok=True)
-    zip_path = os.path.join(RELEASE_DIR, ZIP_NAME)
+    zip_path = os.path.join(RELEASE_DIR, zip_name)
     if os.path.exists(zip_path):
         os.remove(zip_path)
     import zipfile
@@ -77,7 +85,7 @@ def make_sha256(zip_path):
     digest = h.hexdigest()
     sidecar = zip_path + '.sha256'
     with open(sidecar, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(f'{digest}  {ZIP_NAME}\n')
+        f.write(f'{digest}  {os.path.basename(zip_path)}\n')
     return digest
 
 
@@ -97,7 +105,7 @@ def main():
     # 确认包内带上了 VERSION（运行时版本号来源）
     if not os.path.exists(os.path.join(DIST_APP, 'VERSION')):
         fail('dist/app/VERSION 复制失败，zip 将缺少版本真源')
-    zip_path = make_zip()
+    zip_path = make_zip(zip_name_for(version))
     digest = make_sha256(zip_path)
     size_mb = os.path.getsize(zip_path) / 1048576
     print(f'[make_release] DONE {version}')
