@@ -11,7 +11,9 @@
 import os
 import sys
 
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import (
+    QEasingCurve, QPropertyAnimation, QRect, Qt, QTimer, QRectF, QPointF
+)
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
@@ -144,23 +146,66 @@ class ModeSelector(QDialog):
 
         bottom = QHBoxLayout()
         bottom.addStretch()
-        btn = QPushButton('进入')
-        btn.setObjectName('primary')
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setFixedSize(112, 40)
-        btn.clicked.connect(self.confirm)
-        bottom.addWidget(btn)
+        self.btn_enter = QPushButton('进入')
+        self.btn_enter.setObjectName('primary')
+        self.btn_enter.setCursor(Qt.PointingHandCursor)
+        self.btn_enter.setFixedSize(112, 40)
+        self.btn_enter.clicked.connect(self.confirm)
+        bottom.addWidget(self.btn_enter)
         root.addLayout(bottom)
 
-        # 默认选中第一张（上门体育）
-        self._cards[0]._selected = True
-        self.choice = 'coaching'
+        # 不预选任何模式：关闭窗口 / ESC = 退出程序（choice 保持 None）
+        self._set_enter_enabled(False)
+
+        # 启动展开动画（showEvent 首次显示时触发一次）
+        self._animated = False
+        self._anims = []
+
+    def _set_enter_enabled(self, enabled: bool):
+        """进入按钮：未选中模式前置灰（内联样式覆盖 #primary QSS）。"""
+        self.btn_enter.setEnabled(enabled)
+        self.btn_enter.setStyleSheet(
+            '' if enabled else
+            f'background: {BORDER}; color: #B9B9B9;'
+        )
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if not self._animated:
+            self._animated = True
+            # singleShot(0)：等布局定稿拿到真实几何，再播放展开动画
+            QTimer.singleShot(0, self._play_open_animation)
+
+    def _play_open_animation(self):
+        """缓慢展开：从 92% 大小 + 全透明，缩放淡入到位（650ms OutCubic）。"""
+        final = self.geometry()
+        start = QRect(0, 0, int(final.width() * 0.92),
+                      int(final.height() * 0.90))
+        start.moveCenter(final.center())
+        self.setGeometry(start)
+
+        anim_geo = QPropertyAnimation(self, b'geometry', self)
+        anim_geo.setDuration(650)
+        anim_geo.setStartValue(start)
+        anim_geo.setEndValue(final)
+        anim_geo.setEasingCurve(QEasingCurve.OutCubic)
+
+        anim_op = QPropertyAnimation(self, b'windowOpacity', self)
+        anim_op.setDuration(650)
+        anim_op.setStartValue(0.0)
+        anim_op.setEndValue(1.0)
+        anim_op.setEasingCurve(QEasingCurve.OutCubic)
+
+        self._anims = [anim_geo, anim_op]
+        anim_geo.start(QPropertyAnimation.DeleteWhenStopped)
+        anim_op.start(QPropertyAnimation.DeleteWhenStopped)
 
     def select_card(self, card: ModeCard):
         for c in self._cards:
             c._selected = c is card
             c.update()
         self.choice = 'coaching' if card is self._cards[0] else 'club'
+        self._set_enter_enabled(True)
 
     def confirm(self):
         self.accept()
