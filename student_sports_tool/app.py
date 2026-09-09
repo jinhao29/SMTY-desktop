@@ -104,9 +104,10 @@ from update_dialog import check_update_on_startup
 # 全局浅色珊瑚橙主题（与 Android 端视觉统一）
 GLOBAL_QSS = LIGHT_QSS
 
-# 优化6新增：GitHub 仓库全名（开发者发版时请同步修改为实际仓库地址）
-# 留空则跳过自动更新检查，避免请求不存在的仓库报错
-UPDATE_REPO = ''
+# 优化6新增：GitHub 仓库全名（2026-09-09 接线：jinhao29/SMTY-desktop）
+# ⚠️ 生效前提：该仓库需能匿名访问 releases（仓库转 public），或已存在带 zip+sha256 的 Release；
+# 当前仓库为 private 且尚无 Release 时，检查会返回"无法获取版本信息"，属预期行为
+UPDATE_REPO = 'jinhao29/SMTY-desktop'
 
 # === 页面索引常量（与 SideNav 菜单项顺序严格对应） ===
 PAGE_HOME = 0

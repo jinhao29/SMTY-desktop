@@ -49,6 +49,7 @@ PROTECTED_CONFIG_FILES: List[str] = [
     '_followup.json',
     '_archive_config.json',
     '_backup_config.json',
+    '_update_config.json',  # 自动更新"跳过此版本"记录，勿被新包覆盖
     'training_tool/blocks_config.json',
     'training_tool\\blocks_config.json',  # Windows 路径分隔符兼容
     'data_center/_data_center_config.json',
