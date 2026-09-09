@@ -177,10 +177,18 @@ class ModeSelector(QDialog):
             QTimer.singleShot(0, self._play_open_animation)
 
     def _play_open_animation(self):
-        """缓慢展开：从 92% 大小 + 全透明，缩放淡入到位（650ms OutCubic）。"""
-        final = self.geometry()
-        start = QRect(0, 0, int(final.width() * 0.92),
-                      int(final.height() * 0.90))
+        """缓慢展开：窗口以中心为锚，向四边同时撑开 + 淡入（650ms OutCubic）。"""
+        natural = self.geometry()
+        # 解除固定宽度（否则宽度分量被 clamp，只剩纵向拉伸）；
+        # 纵向加 90px 余量（进根布局 stretch，不挤卡片），高度才有展开空间
+        self.setMinimumWidth(0)
+        self.setMaximumWidth(16777215)
+        self.setMinimumHeight(natural.height())
+        self.setMaximumHeight(natural.height() + 90)
+        final = QRect(0, 0, natural.width(), natural.height() + 90)
+        final.moveCenter(natural.center())
+        start = QRect(0, 0, int(final.width() * 0.55),
+                      int(final.height() * 0.55))
         start.moveCenter(final.center())
         self.setGeometry(start)
 
@@ -189,6 +197,8 @@ class ModeSelector(QDialog):
         anim_geo.setStartValue(start)
         anim_geo.setEndValue(final)
         anim_geo.setEasingCurve(QEasingCurve.OutCubic)
+        anim_geo.finished.connect(
+            lambda: self.setFixedSize(final.size()))
 
         anim_op = QPropertyAnimation(self, b'windowOpacity', self)
         anim_op.setDuration(650)
