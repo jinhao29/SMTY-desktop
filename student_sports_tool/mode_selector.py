@@ -14,7 +14,9 @@ import sys
 from PySide6.QtCore import (
     QEasingCurve, QPropertyAnimation, QRect, Qt, QTimer, QRectF, QPointF
 )
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import (
+    QColor, QFont, QPainter, QPainterPath, QPen
+)
 from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QWidget
@@ -71,7 +73,8 @@ class ModeCard(QWidget):
         )
         lay.addWidget(d)
 
-    # 右上角图标走 paintEvent 自绘（几何简形，与黑白极简统一）
+    # 右上角图标走 paintEvent 自绘：iOS 风实底圆 + glyph，
+    # 未选中灰调克制，选中点亮绿底白图与卡片描边联动
     def paintEvent(self, ev):
         super().paintEvent(ev)
         p = QPainter(self)
@@ -84,22 +87,37 @@ class ModeCard(QWidget):
                       2 if selected else 1))
         p.setBrush(QColor(SELECTED_BG if selected else '#FFFFFF'))
         p.drawRoundedRect(card, 16, 16)
-        # 右上角圆形图标（直径 34）
-        cx, cy, rad = r.width() - 40, 36, 17
-        icon_color = QColor(PRIMARY if selected else TEXT_MUTED)
-        p.setPen(QPen(icon_color, 1.6))
-        p.setBrush(Qt.NoBrush)
+        # 右上角实底圆图标（直径 40）
+        cx, cy, rad = r.width() - 46, 40, 20
+        base = QColor(PRIMARY if selected else '#F3F4F6')
+        glyph = QColor('#FFFFFF' if selected else '#A3A9B3')
+        p.setPen(Qt.NoPen)
+        p.setBrush(base)
         p.drawEllipse(QPointF(cx, cy), rad, rad)
         if self._icon_kind == 'stopwatch':
-            # 秒表简形：圆盘 + 指针 + 顶部柄
-            p.drawEllipse(QPointF(cx, cy + 2), rad - 6, rad - 6)
-            p.drawLine(QPointF(cx, cy - rad + 2), QPointF(cx, cy - rad + 6))
-            p.drawLine(QPointF(cx, cy + 2), QPointF(cx + 5, cy - 3))
+            # 秒表：圆盘 + 圆头指针 + 顶部柄 + 中心轴点
+            p.setPen(QPen(glyph, 2.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            p.setBrush(Qt.NoBrush)
+            p.drawEllipse(QPointF(cx, cy + 1.5), rad - 8, rad - 8)
+            p.drawLine(QPointF(cx, cy + 1.5), QPointF(cx + 4.8, cy - 3.2))
+            p.drawLine(QPointF(cx, cy - rad + 3.5), QPointF(cx, cy - rad + 7))
+            p.setPen(Qt.NoPen)
+            p.setBrush(glyph)
+            p.drawEllipse(QPointF(cx, cy + 1.5), 1.6, 1.6)
         else:
-            # 俱乐部：闪电简形
-            p.drawLine(QPointF(cx + 3, cy - 9), QPointF(cx - 4, cy + 1))
-            p.drawLine(QPointF(cx - 4, cy + 1), QPointF(cx + 1, cy + 1))
-            p.drawLine(QPointF(cx + 1, cy + 1), QPointF(cx - 3, cy + 9))
+            # 俱乐部：实心闪电（七点多边形，round join 软化尖角）
+            path = QPainterPath()
+            path.moveTo(cx + 4, cy - 12)
+            path.lineTo(cx - 6, cy + 1.5)
+            path.lineTo(cx - 1, cy + 1.5)
+            path.lineTo(cx - 4, cy + 12)
+            path.lineTo(cx + 6, cy - 1.5)
+            path.lineTo(cx + 1, cy - 1.5)
+            path.closeSubpath()
+            p.setPen(QPen(glyph, 1.2, Qt.SolidLine, Qt.RoundCap,
+                          Qt.RoundJoin))
+            p.setBrush(glyph)
+            p.drawPath(path)
         p.end()
 
     def mousePressEvent(self, ev):
