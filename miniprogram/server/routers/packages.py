@@ -6,8 +6,10 @@ from typing import Optional
 
 from database import (execute, query, query_one, now_str, today_str,
                       recalc_student_remaining, package_fee_stats)
+from deps import get_current_user
 
-router = APIRouter(prefix='/api/v1/packages', tags=['packages'])
+router = APIRouter(prefix='/api/v1/packages', tags=['packages'],
+                   dependencies=[Depends(get_current_user)])
 
 
 class PackageBody(BaseModel):

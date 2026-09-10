@@ -5,8 +5,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 from database import execute, query, query_one, now_str
+from deps import get_current_user
 
-router = APIRouter(prefix='/api/v1/coaches', tags=['coaches'])
+router = APIRouter(prefix='/api/v1/coaches', tags=['coaches'],
+                   dependencies=[Depends(get_current_user)])
 
 ROLE_LABELS = {'fulltime': '全职', 'parttime': '兼职',
                'partner_level1': '一级合伙人', 'partner_level2': '二级合伙人'}

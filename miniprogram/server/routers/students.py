@@ -5,8 +5,12 @@ from pydantic import BaseModel
 from typing import Optional
 
 from database import execute, query, query_one, now_str, recalc_student_remaining
+from deps import get_current_user
 
-router = APIRouter(prefix='/api/v1/students', tags=['students'])
+# 全路由强制鉴权：未携带有效 token 一律 401。
+# 此前仅 auth/ocr 挂了鉴权，其余业务路由裸奔——同网段任何人可直接读写全部学员数据。
+router = APIRouter(prefix='/api/v1/students', tags=['students'],
+                   dependencies=[Depends(get_current_user)])
 
 
 class StudentBody(BaseModel):

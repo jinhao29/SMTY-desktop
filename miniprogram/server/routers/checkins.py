@@ -9,8 +9,10 @@ from typing import List, Optional
 
 from database import (execute, query, query_one, now_str, today_str,
                       recalc_student_remaining)
+from deps import get_current_user
 
-router = APIRouter(prefix='/api/v1', tags=['checkins'])
+router = APIRouter(prefix='/api/v1', tags=['checkins'],
+                   dependencies=[Depends(get_current_user)])
 
 
 class CheckinBody(BaseModel):

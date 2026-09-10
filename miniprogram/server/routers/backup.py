@@ -9,8 +9,10 @@ from pydantic import BaseModel
 
 from database import (execute, query, query_one, now_str,
                       recalc_student_remaining, current_mode)
+from deps import get_current_user
 
-router = APIRouter(prefix='/api/v1/backup', tags=['backup'])
+router = APIRouter(prefix='/api/v1/backup', tags=['backup'],
+                   dependencies=[Depends(get_current_user)])
 
 EXPORT_VERSION = 1
 

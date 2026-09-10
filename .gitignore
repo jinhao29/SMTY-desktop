@@ -63,6 +63,8 @@ top_whitespace_audit_report.html
 student_sports_tool/release/
 
 # === 2026-09-10 补齐（代码审查 P2-17 死代码/调试产物污染）===
+# 小程序后端验证脚本与启动脚本（run_server.cmd 含明文 MP_SECRET，严禁入库）
+_mp_verify/
 # 更新链路真机测试产物（APK/ZIP/截图）
 _update_test/
 # UI 预览截图（渲染脚本输出，纯过程产物）

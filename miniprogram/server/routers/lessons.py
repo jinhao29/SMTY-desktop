@@ -5,8 +5,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from database import execute, query, query_one, now_str, today_str
+from deps import get_current_user
 
-router = APIRouter(prefix='/api/v1/lessons', tags=['lessons'])
+router = APIRouter(prefix='/api/v1/lessons', tags=['lessons'],
+                   dependencies=[Depends(get_current_user)])
 
 
 class LessonBody(BaseModel):
