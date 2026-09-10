@@ -13,6 +13,7 @@ M4-S2 改造：
 - 任务执行期间禁用所有按钮，防止并发触发
 """
 import modern_dialog as dialog
+import logging
 import os
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -164,6 +165,38 @@ class BackupPanel(QWidget):
         ol.addLayout(ops_grid)
         lay.addWidget(gb_ops)
 
+        # 备份加密口令（v1.0.3）：解密从手机传入的加密备份
+        gb_pwd = QGroupBox('备份加密口令')
+        gb_pwd.setObjectName('card')
+        pl = QVBoxLayout(gb_pwd)
+        pl.setSpacing(8)
+        lbl_pwd_hint = QLabel(
+            '手机端「设置 → 数据管理 → 备份加密口令」设置了口令后，'
+            '备份包内的数据库将加密存储；在此填入同一口令方可恢复。留空表示备份未加密。')
+        lbl_pwd_hint.setWordWrap(True)
+        lbl_pwd_hint.setStyleSheet('color:#9B9B9B;')
+        pl.addWidget(lbl_pwd_hint)
+        pwd_row = QHBoxLayout()
+        pwd_row.setSpacing(10)
+        self.le_backup_passphrase = QLineEdit()
+        self.le_backup_passphrase.setEchoMode(QLineEdit.Password)
+        self.le_backup_passphrase.setPlaceholderText('加密口令（未加密备份可留空）')
+        try:
+            from data_center.config_manager import load_config
+            self.le_backup_passphrase.setText(
+                str(load_config(self._dir_getter()).get('backup_passphrase') or ''))
+        except Exception:
+            pass
+        self.le_backup_passphrase.editingFinished.connect(self._save_backup_passphrase)
+        pwd_row.addWidget(self.le_backup_passphrase, 1)
+        self.btn_pwd_toggle = QPushButton('显示', objectName='tertiary')
+        self.btn_pwd_toggle.setCheckable(True)
+        self.btn_pwd_toggle.setFixedWidth(64)
+        self.btn_pwd_toggle.toggled.connect(self._toggle_passphrase_echo)
+        pwd_row.addWidget(self.btn_pwd_toggle)
+        pl.addLayout(pwd_row)
+        lay.addWidget(gb_pwd)
+
         # 进度条（M4-S2 新增）
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -188,6 +221,48 @@ class BackupPanel(QWidget):
         """刷新目录显示。"""
         d = self._dir_getter()
         self.lbl_dir.setText(d or '（未选择）')
+
+    # === v1.0.3 备份加密口令 ===
+
+    def _toggle_passphrase_echo(self, checked: bool):
+        """切换口令明文/密文显示。"""
+        self.le_backup_passphrase.setEchoMode(
+            QLineEdit.Normal if checked else QLineEdit.Password)
+        self.btn_pwd_toggle.setText('隐藏' if checked else '显示')
+
+    def _save_backup_passphrase(self):
+        """口令变更后写入配置（持久化，重启不丢）。"""
+        try:
+            from data_center.config_manager import update_config
+            update_config(self._dir_getter(),
+                          backup_passphrase=self.le_backup_passphrase.text().strip())
+        except Exception as e:
+            logging.getLogger(__name__).warning('保存备份加密口令失败：%s', e)
+
+    def _current_passphrase(self) -> str:
+        """取当前口令：优先界面输入，回退环境变量 SMTY_BACKUP_PASSPHRASE。"""
+        value = self.le_backup_passphrase.text().strip()
+        if value:
+            return value
+        return (os.environ.get('SMTY_BACKUP_PASSPHRASE') or '').strip()
+
+    @staticmethod
+    def _backup_looks_encrypted(zip_path: str) -> bool:
+        """探测备份包是否为加密包（读 manifest）。
+
+        提前拦截的意义：加密包在缺口令时若直接进恢复流程，
+        会以"数据库损坏"的面目失败，误导教练以为备份坏了。
+        """
+        import json
+        import zipfile
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                if 'backup_manifest.json' not in zf.namelist():
+                    return False
+                manifest = json.loads(zf.read('backup_manifest.json').decode('utf-8'))
+                return bool(manifest.get('encrypted'))
+        except (zipfile.BadZipFile, OSError, ValueError, KeyError):
+            return False
 
     def _log(self, msg):
         """追加日志。"""
@@ -307,6 +382,20 @@ class BackupPanel(QWidget):
                 f'冲突检测过程出错，将按默认逻辑恢复：\n{e}'
             )
             conflict_resolutions = None
+
+        # v1.0.3：把界面口令注入环境变量，供 archive_manager 解密加密备份
+        # （口径统一在 archive_manager 的 SMTY_BACKUP_PASSPHRASE，避免多处解析）
+        passphrase = self._current_passphrase()
+        if passphrase:
+            os.environ['SMTY_BACKUP_PASSPHRASE'] = passphrase
+        else:
+            os.environ.pop('SMTY_BACKUP_PASSPHRASE', None)
+            if self._backup_looks_encrypted(zip_path):
+                dialog.warn(
+                    self, '需要加密口令',
+                    '该备份已加密，但未填写「备份加密口令」。\n'
+                    '请在备份面板的「备份加密口令」一栏填入手机端设置的同一口令后重试。')
+                return
 
         worker = RestoreWorker(zip_path, dir_path, conflict_resolutions)
 

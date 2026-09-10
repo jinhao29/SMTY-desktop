@@ -61,3 +61,26 @@ top_whitespace_audit_report.html
 
 # 发版打包产物（make_release.py 输出，上传 GitHub Release 用，不入库）
 student_sports_tool/release/
+
+# === 2026-09-10 补齐（代码审查 P2-17 死代码/调试产物污染）===
+# 更新链路真机测试产物（APK/ZIP/截图）
+_update_test/
+# UI 预览截图（渲染脚本输出，纯过程产物）
+ui_preview/
+student_sports_tool/ui_preview/
+# 数据库时光机快照（meta_index_store 运行时生成，可随时重建）
+_db_snapshots/
+**/_db_snapshots/
+# 代码审查报告（本地生成，时效性产物）
+code_review_*.md
+# 桌面端运行时同步备份
+.sync_backups/
+student_sports_tool/.sync_backups/
+# 凭据修复前的临时备份（不可入库）
+miniprogram/server/_backup_before_cred_fix/
+# 小程序运行时数据与虚拟环境
+miniprogram/server/server_data/
+miniprogram/node_modules/
+miniprogram/dist/
+# 训练工具一次性验证脚本
+training_tool/_verify_*.py

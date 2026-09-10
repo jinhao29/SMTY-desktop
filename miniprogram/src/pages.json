@@ -1,0 +1,147 @@
+{
+  "pages": [
+    {
+      "path": "pages/launch/launch",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/home/home",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "navigationBarTitleText": "首页",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/schedule/index",
+      "style": {
+        "navigationBarTitleText": "课表"
+      }
+    },
+    {
+      "path": "pages/schedule/lesson-edit",
+      "style": {
+        "navigationBarTitleText": "排课"
+      }
+    },
+    {
+      "path": "pages/schedule/batch-import",
+      "style": {
+        "navigationBarTitleText": "批量导入排课"
+      }
+    },
+    {
+      "path": "pages/manage/manage",
+      "style": {
+        "navigationBarTitleText": "管理"
+      }
+    },
+    {
+      "path": "pages/student/detail",
+      "style": {
+        "navigationBarTitleText": "学员详情"
+      }
+    },
+    {
+      "path": "pages/student/edit",
+      "style": {
+        "navigationBarTitleText": "学员信息"
+      }
+    },
+    {
+      "path": "pages/coach/detail",
+      "style": {
+        "navigationBarTitleText": "教练详情"
+      }
+    },
+    {
+      "path": "pages/coach/edit",
+      "style": {
+        "navigationBarTitleText": "教练信息"
+      }
+    },
+    {
+      "path": "pages/checkin/index",
+      "style": {
+        "navigationBarTitleText": "签到管理"
+      }
+    },
+    {
+      "path": "pages/checkin/history",
+      "style": {
+        "navigationBarTitleText": "签到历史"
+      }
+    },
+    {
+      "path": "pages/package/list",
+      "style": {
+        "navigationBarTitleText": "课时与课程包"
+      }
+    },
+    {
+      "path": "pages/package/edit",
+      "style": {
+        "navigationBarTitleText": "课时包"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    },
+    {
+      "path": "pages/settings/data",
+      "style": {
+        "navigationBarTitleText": "数据管理"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "上门体育",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F2F4F8"
+  },
+  "tabBar": {
+    "color": "#8A94A6",
+    "selectedColor": "#5B6BF7",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页",
+        "iconPath": "static/icons/tab-home.png",
+        "selectedIconPath": "static/icons/tab-home-active.png"
+      },
+      {
+        "pagePath": "pages/schedule/index",
+        "text": "课表",
+        "iconPath": "static/icons/tab-calendar.png",
+        "selectedIconPath": "static/icons/tab-calendar-active.png"
+      },
+      {
+        "pagePath": "pages/manage/manage",
+        "text": "管理",
+        "iconPath": "static/icons/tab-user.png",
+        "selectedIconPath": "static/icons/tab-user-active.png"
+      },
+      {
+        "pagePath": "pages/settings/index",
+        "text": "设置",
+        "iconPath": "static/icons/tab-gear.png",
+        "selectedIconPath": "static/icons/tab-gear-active.png"
+      }
+    ]
+  }
+}

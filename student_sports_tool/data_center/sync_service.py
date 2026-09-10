@@ -13,6 +13,7 @@
 - 日志通过回调分发（UI 线程安全由调用方保证，如 Qt 用信号转发）
 """
 import os
+import secrets
 import threading
 import time
 import logging
@@ -96,9 +97,17 @@ class SyncServiceManager:
             if self.is_running():
                 return True
             self._stop_event.clear()
+            # P1 修复：禁止空 token。原实现空 token 时服务端不鉴权，
+            # 同网段任何设备可上传/拉取全部学员数据。
+            # 此处集中生成随机 token 并回写 config，保证 server 与 beacon 携带同一值
+            # （若只在 create_server 内生成，beacon 仍会广播空 token，手机端无法配对）。
+            effective_token = (token or '').strip()
+            if not effective_token:
+                effective_token = secrets.token_urlsafe(24)
+                self._log('未配置同步 token，已自动生成随机 token（手机端将通过 UDP 发现自动获取）')
             self.config = {
                 'port': int(port),
-                'token': token or '',
+                'token': effective_token,
                 'archive_dir': archive_dir or '',
                 'save_dir': save_dir or os.path.join(archive_dir or '.', '.sync_backups'),
             }

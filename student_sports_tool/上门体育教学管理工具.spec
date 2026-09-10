@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller 打包规范文件（重建版，覆盖全模块）。
 
-入口：app.py（统一主窗口，Tab 容器）
+入口：main.py（真正的应用入口：建 QApplication → MainWindow → app.py 调度层）
 覆盖模块：
   - 根目录：main / theme / ui_components / excel_builder / scorer / standards
             summary_builder / lesson_manager / lesson_window
@@ -214,7 +214,7 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    ['app.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=datas,

@@ -14,6 +14,7 @@
 """
 import os
 import sys
+import json
 import shutil
 import zipfile
 import logging
@@ -25,6 +26,9 @@ _PARENT = os.path.dirname(_HERE)
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 from file_lock import file_lock, with_retry
+
+# v1.0.3 备份解密（与 Android BackupCrypto.kt 格式对齐）
+from data_center.android_backup_parser import is_encrypted_payload, _decrypt_payload
 
 
 def scan_student_files(dir_path):
@@ -191,8 +195,31 @@ def extract_android_assets(zip_path, target_dir, progress_cb=None):
             db_path = None
             meta_path = None
             photo_count = 0
+            # v1.0.3 备份加密：先读 manifest 派生密钥（加密包才有）
+            crypto_key = None
             with zipfile.ZipFile(zip_path, 'r') as zf:
-                for name in zf.namelist():
+                names = zf.namelist()
+                if 'backup_manifest.json' in names:
+                    try:
+                        manifest = json.loads(zf.read('backup_manifest.json').decode('utf-8'))
+                        if manifest.get('encrypted'):
+                            passphrase = (os.environ.get('SMTY_BACKUP_PASSPHRASE') or '').strip()
+                            if passphrase:
+                                from data_center.android_backup_parser import _derive_backup_key
+                                crypto_key = _derive_backup_key(
+                                    passphrase, manifest.get('salt', ''),
+                                    int(manifest.get('iterations', 600000)))
+                                if progress_cb:
+                                    progress_cb('已识别加密备份，正在解密…')
+                            else:
+                                if progress_cb:
+                                    progress_cb(
+                                        '备份已加密，但未提供口令（环境变量 SMTY_BACKUP_PASSPHRASE），'
+                                        '数据库条目将无法解析')
+                    except (ValueError, KeyError, OSError) as e:
+                        logging.getLogger(__name__).warning('读取备份清单失败：%s', e)
+
+                for name in names:
                     norm_name = os.path.normpath(name)
                     base = os.path.basename(norm_name)
                     if not base:
@@ -211,8 +238,18 @@ def extract_android_assets(zip_path, target_dir, progress_cb=None):
                     if is_android_db:
                         out_path = os.path.join(android_dir, base)
                         try:
-                            with zf.open(name) as src, open(out_path, 'wb') as dst:
-                                shutil.copyfileobj(src, dst)
+                            with zf.open(name) as src:
+                                payload = src.read()
+                            # 加密备份：逐条目按魔数判定并解密
+                            if crypto_key is not None and is_encrypted_payload(payload):
+                                decrypted = _decrypt_payload(payload, crypto_key)
+                                if decrypted is None:
+                                    logging.getLogger(__name__).warning(
+                                        '备份条目 %s 解密失败（口令不匹配或文件损坏）', base)
+                                    continue
+                                payload = decrypted
+                            with open(out_path, 'wb') as dst:
+                                dst.write(payload)
                             # 仅主数据库文件记入 db_path（wal/shm 仅供 SQLite 恢复时配对）
                             if not base.endswith(('-wal', '-shm')):
                                 db_path = out_path
@@ -226,8 +263,18 @@ def extract_android_assets(zip_path, target_dir, progress_cb=None):
                     if base == 'export_meta.json':
                         out_path = os.path.join(android_dir, base)
                         try:
-                            with zf.open(name) as src, open(out_path, 'wb') as dst:
-                                shutil.copyfileobj(src, dst)
+                            with zf.open(name) as src:
+                                payload = src.read()
+                            if crypto_key is not None and is_encrypted_payload(payload):
+                                decrypted = _decrypt_payload(payload, crypto_key)
+                                if decrypted is None:
+                                    # meta 是可选通道（db 为准），解密失败不阻断后续解析
+                                    logging.getLogger(__name__).warning(
+                                        'export_meta.json 解密失败，跳过（可用 db 回退）')
+                                    continue
+                                payload = decrypted
+                            with open(out_path, 'wb') as dst:
+                                dst.write(payload)
                             meta_path = out_path
                             if progress_cb:
                                 progress_cb('已提取 Android 元数据索引：export_meta.json')

@@ -20,13 +20,27 @@
 线程模型：ThreadingHTTPServer；合并用模块级互斥锁串行化（多线程上传安全）。
 """
 import json
+import logging
 import os
+import secrets
 import sys
 import tempfile
 import threading
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+_logger = logging.getLogger(__name__)
+
+# 服务内日志级别字符串 → logging 级别（_log 的 level 参数为自定义字符串）
+_LEVEL_MAP = {
+    'DEBUG': logging.DEBUG,
+    'INFO': logging.INFO,
+    'WARN': logging.WARNING,
+    'WARNING': logging.WARNING,
+    'ERROR': logging.ERROR,
+    'CRITICAL': logging.CRITICAL,
+}
 
 DEFAULT_HOST = '0.0.0.0'
 DEFAULT_PORT = 8765
@@ -556,10 +570,12 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         if SyncRequestHandler.log_cb:
             try:
                 SyncRequestHandler.log_cb(line)
+                return
             except Exception:
-                pass
-        else:
-            print(line, flush=True)
+                # 回调抛异常时回退到 logging，避免日志彻底丢失
+                _logger.exception('同步日志回调失败，回退到 logging')
+        # 无 UI 回调（控制台 / 服务模式）时走 logging，便于统一收集与落盘
+        _logger.log(_LEVEL_MAP.get(level.upper(), logging.INFO), line)
 
     def log_message(self, format, *args):
         pass
@@ -577,7 +593,15 @@ def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
         pc_name: PC 名称（手机端 hello 响应展示）
         status_cb: v23.11 同步结果回调 (kind, message)，如 ('merge_ok', '已合并 9 个档案')
     """
-    SyncRequestHandler.server_token = token or ''
+    # P1 修复：禁止空 token 放行。
+    # 原实现 token='' 时 _check_token 直接 return True，同网段任何设备都能
+    # 上传/拉取全部学员数据。现改为：调用方未提供 token 时自动生成随机 token，
+    # 保证鉴权始终生效；手机端需通过 hello 响应或二维码获取该 token 后同步。
+    effective_token = (token or '').strip()
+    if not effective_token:
+        effective_token = secrets.token_urlsafe(24)
+        _logger.warning('未配置同步 token，已自动生成随机 token —— 手机端需重新配对方可同步')
+    SyncRequestHandler.server_token = effective_token
     SyncRequestHandler.save_dir = save_dir or DEFAULT_SAVE_DIR
     SyncRequestHandler.archive_dir = archive_dir or ''
     SyncRequestHandler.pc_name = pc_name or ''
@@ -615,19 +639,29 @@ USB 连接:
     else:
         archive_dir = ''
 
+    server = create_server(args.host, args.port, args.save_dir,
+                           args.token, archive_dir, log_cb=None)
+
+    # token 状态必须在 create_server 之后取：未配置时 create_server 会自动生成随机 token，
+    # 提前按 args.token 判断会误报「未启用」。
+    effective_token = getattr(SyncRequestHandler, 'server_token', '') or ''
+
     print('=' * 60, flush=True)
     print('上门体育桌面端双端同步服务 v23', flush=True)
     print('=' * 60, flush=True)
     print('监听地址: http://%s:%d' % (args.host, args.port), flush=True)
     print('保存目录: %s' % os.path.abspath(args.save_dir), flush=True)
     print('档案目录: %s' % (archive_dir or '未配置（仅保存不合并）'), flush=True)
-    print('鉴权 token: %s' % ('已启用' if args.token else '未启用'), flush=True)
+    if effective_token:
+        print('鉴权 token: 已启用', flush=True)
+        if not args.token:
+            print('           本次自动生成: %s' % effective_token, flush=True)
+            print('           （手机端经 UDP 心跳自动获取，无需手填）', flush=True)
+    else:
+        print('鉴权 token: 未启用（警告：任何局域网设备均可写入）', flush=True)
     print('USB 连接: adb reverse tcp:%d tcp:%d，手机端 syncHost 填 127.0.0.1' % (args.port, args.port), flush=True)
     print('按 Ctrl+C 停止服务', flush=True)
     print('=' * 60, flush=True)
-
-    server = create_server(args.host, args.port, args.save_dir,
-                           args.token, archive_dir, log_cb=None)
     # 控制台模式同样广播心跳（手机端「自动发现 PC」）
     beacon = None
     if archive_dir:

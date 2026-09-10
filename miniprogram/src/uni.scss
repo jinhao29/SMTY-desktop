@@ -1,0 +1,28 @@
+/* uni.scss —— 全局 SCSS 变量（uni-app 约定文件） */
+
+// 主色
+$primary: #5B6BF7;
+$primary-light: #ECF0FF;
+$bg: #F2F4F8;
+$card: #FFFFFF;
+
+// 文字
+$text: #1A2233;
+$text-2: #5A6478;
+$text-3: #8A94A6;
+
+// 语义色
+$success: #34C77B;
+$warning: #F59E0B;
+$danger: #EF4444;
+
+// 圆角/阴影
+$radius: 12px;
+$shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+// 间距
+$gap-xs: 8px;
+$gap-s: 12px;
+$gap-m: 16px;
+$gap-l: 20px;
+$gap-xl: 24px;

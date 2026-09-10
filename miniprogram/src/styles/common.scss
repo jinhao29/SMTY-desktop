@@ -1,0 +1,112 @@
+/* 全局通用样式 */
+.card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  padding: 16px;
+  margin: 12px 16px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1A2233;
+}
+
+.btn-primary {
+  background: #5B6BF7;
+  color: #FFFFFF;
+  border-radius: 12px;
+  font-size: 16px;
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.btn-primary.disabled { opacity: 0.5; }
+
+.btn-secondary {
+  background: #FFFFFF;
+  color: #5B6BF7;
+  border: 1px solid #5B6BF7;
+  border-radius: 12px;
+  font-size: 16px;
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid #F0F2F7;
+
+  &:last-child { border-bottom: none; }
+
+  .cell-label { font-size: 14px; color: #5A6478; }
+  .cell-value { font-size: 14px; color: #1A2233; font-weight: 500; }
+}
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ECF0FF;
+  color: #5B6BF7;
+
+  &.tag-success { background: #E8F9F0; color: #34C77B; }
+  &.tag-warning { background: #FEF5E7; color: #F59E0B; }
+  &.tag-danger { background: #FDECEC; color: #EF4444; }
+  &.tag-gray { background: #F0F2F7; color: #8A94A6; }
+}
+
+.empty {
+  text-align: center;
+  color: #8A94A6;
+  font-size: 13px;
+  padding: 48px 0;
+}
+
+.form-item {
+  margin-bottom: 16px;
+
+  /* 两列字段行：左右分栏（之前缺失 display:flex 导致列堆叠+错位缩进） */
+  &.form-row { display: flex; gap: 12px;
+    > view { flex: 1; min-width: 0; } }
+
+  .form-label {
+    font-size: 13px;
+    color: #5A6478;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .form-input {
+    background: #F7F8FC;
+    border-radius: 10px;
+    height: 44px;
+    padding: 0 12px;
+    font-size: 14px;
+    width: auto;
+  }
+
+  .form-textarea {
+    background: #F7F8FC;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 14px;
+    width: auto;
+    min-height: 80px;
+  }
+}
+
+/* tabBar 页面根容器：与底部导航保持距离 */
+.tab-page {
+  padding-bottom: 32px;
+  min-height: 100vh;
+  box-sizing: border-box;
+}

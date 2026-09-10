@@ -33,6 +33,10 @@ DEFAULTS = {
     'auto_backup_frequency': 'daily',
     'max_auto_backups': 5,
     'last_auto_backup_at': '',
+    # === v1.0.3 备份加密口令 ===
+    # 手机端设置了「备份加密口令」后，备份包内的数据库会 AES-GCM 加密；
+    # 桌面端需填入同一口令才能恢复。留空表示备份未加密（旧格式）。
+    'backup_passphrase': '',
 }
 
 

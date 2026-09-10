@@ -13,9 +13,51 @@
 """
 import os
 import json
+import logging
 import shutil
 import sqlite3
 from typing import Any, Dict, List, Optional
+
+_logger = logging.getLogger(__name__)
+
+# ===== v1.0.3 备份加密：与 Android BackupCrypto.kt 严格对齐 =====
+# 加密载荷格式：[魔数 SMTB 4B][GCM IV 12B][密文+GCM 标签 16B]
+# 密钥派生：PBKDF2WithHmacSHA256(passphrase, salt, iterations, 256bit) -> AES-256
+_BACKUP_MAGIC = b'SMTB'
+_GCM_IV_LEN = 12
+_GCM_TAG_BITS = 128
+_DEFAULT_ITERATIONS = 600000
+
+
+def is_encrypted_payload(data: bytes) -> bool:
+    """判定字节流是否为 Android 备份加密载荷（仅查魔数）。"""
+    return len(data) >= len(_BACKUP_MAGIC) and data[:len(_BACKUP_MAGIC)] == _BACKUP_MAGIC
+
+
+def _derive_backup_key(passphrase: str, salt_hex: str, iterations: int):
+    """由口令 + 盐派生 AES-256 密钥（PBKDF2-HMAC-SHA256）。"""
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    salt = bytes.fromhex(salt_hex)
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt,
+                     iterations=max(1, int(iterations)))
+    return kdf.derive(passphrase.encode('utf-8'))
+
+
+def _decrypt_payload(data: bytes, key) -> Optional[bytes]:
+    """解密备份载荷；魔数不符或密钥错误返回 None。"""
+    if not is_encrypted_payload(data):
+        return None
+    if len(data) < len(_BACKUP_MAGIC) + _GCM_IV_LEN + 16:
+        return None
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        iv = data[len(_BACKUP_MAGIC):len(_BACKUP_MAGIC) + _GCM_IV_LEN]
+        ciphertext = data[len(_BACKUP_MAGIC) + _GCM_IV_LEN:]
+        return AESGCM(key).decrypt(iv, ciphertext, None)
+    except Exception:
+        # 口令错误 / 密文被篡改 / 格式损坏统一返回 None
+        return None
 
 
 # Android 端核心表名（Room 实体映射）
@@ -207,7 +249,8 @@ def parse_meta_json(json_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]
     return result
 
 
-def parse_android_backup(zip_path: str, extract_dir: str) -> Dict[str, List[Dict[str, Any]]]:
+def parse_android_backup(zip_path: str, extract_dir: str,
+                        passphrase: str = '') -> Dict[str, List[Dict[str, Any]]]:
     """从 Android 备份 zip 中提取并解析数据。
 
     优先级：export_meta.json > .db 文件直接解析。
@@ -215,6 +258,10 @@ def parse_android_backup(zip_path: str, extract_dir: str) -> Dict[str, List[Dict
     参数:
         zip_path: Android 备份 zip 路径
         extract_dir: 解压临时目录
+        passphrase: 备份口令（用户私钥种子）。v1.0.3 起 Android 端支持加密备份，
+                    加密包内含 backup_manifest.json 标记 + 盐与迭代次数。
+                    留空时：备份未加密则正常解析；备份已加密则返回空结果并记录警告
+                    （绝不把密文当数据库解析，否则会误报"数据库损坏"）。
 
     返回:
         {students, lessons, packages}
@@ -235,6 +282,25 @@ def parse_android_backup(zip_path: str, extract_dir: str) -> Dict[str, List[Dict
     meta_path = None
     android_db_names = ('sports_coach_db', 'sports_coach_db-wal', 'sports_coach_db-shm')
     os.makedirs(extract_dir, exist_ok=True)
+
+    # v1.0.3：先探测是否为加密备份，取得解密密钥
+    crypto_key = None
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            if 'backup_manifest.json' in zf.namelist():
+                manifest = json.loads(zf.read('backup_manifest.json').decode('utf-8'))
+                if manifest.get('encrypted'):
+                    if not (passphrase or '').strip():
+                        logging.getLogger(__name__).warning(
+                            '备份 %s 已加密但未提供口令，跳过解析（请在界面填写用户私钥）',
+                            os.path.basename(zip_path))
+                        return result
+                    crypto_key = _derive_backup_key(
+                        passphrase, manifest.get('salt', ''),
+                        int(manifest.get('iterations', 600000)))
+    except (zipfile.BadZipFile, OSError, ValueError, KeyError) as e:
+        logging.getLogger(__name__).warning('读取备份清单失败，按未加密处理：%s', e)
+
     with zipfile.ZipFile(zip_path, 'r') as zf:
         for name in zf.namelist():
             base = os.path.basename(os.path.normpath(name))
@@ -243,24 +309,28 @@ def parse_android_backup(zip_path: str, extract_dir: str) -> Dict[str, List[Dict
                 (lower.endswith('.db') and not lower.startswith('sqlite_'))
                 or base in android_db_names
             )
-            if is_android_db:
+            if is_android_db or base == 'export_meta.json':
                 dest = os.path.join(extract_dir, base)
                 try:
-                    with zf.open(name) as src, open(dest, 'wb') as dst:
-                        shutil.copyfileobj(src, dst)
+                    with zf.open(name) as src:
+                        payload = src.read()
+                    # 加密备份：逐条目按魔数判定并解密
+                    if crypto_key is not None and is_encrypted_payload(payload):
+                        decrypted = _decrypt_payload(payload, crypto_key)
+                        if decrypted is None:
+                            logging.getLogger(__name__).warning(
+                                '备份条目 %s 解密失败（口令不匹配或文件损坏），已跳过', base)
+                            continue
+                        payload = decrypted
+                    with open(dest, 'wb') as dst:
+                        dst.write(payload)
                 except (OSError, KeyError):
                     continue
                 # 仅主数据库文件记入 db_path（wal/shm 仅供 SQLite 恢复时配对）
-                if not base.endswith(('-wal', '-shm')):
+                if is_android_db and not base.endswith(('-wal', '-shm')):
                     db_path = dest
-            elif base == 'export_meta.json':
-                dest = os.path.join(extract_dir, base)
-                try:
-                    with zf.open(name) as src, open(dest, 'wb') as dst:
-                        shutil.copyfileobj(src, dst)
+                elif base == 'export_meta.json':
                     meta_path = dest
-                except (OSError, KeyError):
-                    continue
 
     # 优先使用 meta.json
     if meta_path and os.path.exists(meta_path):
