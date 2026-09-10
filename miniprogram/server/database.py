@@ -60,6 +60,20 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
+def get_conn_for_mode(mode: str) -> sqlite3.Connection:
+    """按指定模式取连接（不依赖请求级 contextvar）。
+
+    仅供测试 / 启动初始化等无请求上下文的场景使用；业务代码应走 get_conn()。
+    """
+    if mode not in VALID_MODES:
+        raise ValueError(f'未知模式: {mode}')
+    token = _mode_ctx.set(mode)
+    try:
+        return get_conn()
+    finally:
+        _mode_ctx.reset(token)
+
+
 def _ensure_schema(conn):
     """幂等建表 + 管理员账号播种（每个模式库独立初始化）。
 

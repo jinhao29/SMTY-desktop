@@ -1,0 +1,64 @@
+name: Miniprogram Backend Tests
+
+# === 小程序后端回归测试（2026-09-10 建立）===
+# 背景：本轮发现 P0 —— 6 个业务路由模块（students / coaches / lessons /
+# checkins / packages / backup）的 APIRouter 全部漏挂 get_current_user，
+# 34 个端点在未携带 token 时返回 200 并正常读写全部学员数据。
+#
+# 该工作流的作用是**防止鉴权再次回归**：
+#   - test_auth_guard.py      每个受保护端点 × 多种攻击向量
+#   - test_startup_guard.py   MP_SECRET 缺失/过短必须拒绝启动
+#   - test_business_logic.py  费用口径 / 扣课时 / 模式隔离 / 冲突检测
+#
+# 触发：任何改动 miniprogram/server 的推拉请求都必须先过这道门。
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'miniprogram/server/**'
+      - '.github/workflows/miniprogram-tests.yml'
+  pull_request:
+    paths:
+      - 'miniprogram/server/**'
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: miniprogram/server
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 安装测试依赖
+        # 只装测试必需的最小依赖，不装 OCR（rapidocr/onnxruntime 体积大且
+        # ocr 路由在运行时按需 import，鉴权用例无需模型文件）
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'fastapi>=0.110,<1.0' 'uvicorn[standard]>=0.27,<1.0' \
+                      'pydantic>=2.5,<3.0' 'python-multipart>=0.0.9,<1.0' \
+                      pytest httpx
+
+      - name: 鉴权回归测试（最高优先级）
+        # 单独成步：鉴权失败时在 CI 页面上一眼可见，不必翻日志
+        run: python -m pytest tests/test_auth_guard.py -v
+
+      - name: 启动守卫测试
+        run: python -m pytest tests/test_startup_guard.py -v
+
+      - name: 业务逻辑回归测试
+        run: python -m pytest tests/test_business_logic.py -v
+
+      - name: 全量测试汇总
+        if: always()
+        run: python -m pytest --tb=short
