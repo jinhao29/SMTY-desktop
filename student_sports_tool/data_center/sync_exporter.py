@@ -22,7 +22,7 @@ if _PARENT not in sys.path:
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from file_lock import file_lock
+from file_lock import file_lock, atomic_save_workbook
 
 
 def _import_profile_manager():
@@ -144,5 +144,5 @@ def build_phone_sync_excel(dir_path: str, output_path: str) -> int:
     ws.freeze_panes = 'A2'
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     with file_lock(output_path):
-        wb.save(output_path)
+        atomic_save_workbook(wb, output_path)
     return len(names)

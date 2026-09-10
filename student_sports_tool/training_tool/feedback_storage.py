@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
-from file_lock import file_lock
+from file_lock import file_lock, atomic_save_workbook
 
 FEEDBACK_FILE = '课堂反馈.xlsx'
 FEEDBACK_SHEET = '反馈记录'
@@ -53,7 +53,7 @@ def ensure_file(dir_path: str) -> str:
         ws.column_dimensions[chr(64 + i)].width = w
     ws.freeze_panes = 'A2'
     with file_lock(fpath):
-        wb.save(fpath)
+        atomic_save_workbook(wb, fpath)
     return fpath
 
 
@@ -76,7 +76,7 @@ def save_feedback(dir_path: str, student_name: str, training_content: str,
         cell.border = BORDER
         cell.alignment = CENTER if i <= 5 else LEFT
     with file_lock(fpath):
-        wb.save(fpath)
+        atomic_save_workbook(wb, fpath)
     return True
 
 

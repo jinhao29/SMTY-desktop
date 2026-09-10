@@ -9,7 +9,7 @@
 import modern_dialog as dialog
 import os
 import logging
-from file_lock import file_lock
+from file_lock import file_lock, atomic_save_workbook
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
@@ -491,7 +491,7 @@ class RenewalPanel(QWidget):
                     ws.cell(row=r, column=4, value=s['last_date'])
                     ws.cell(row=r, column=5, value=s['phone'])
             with file_lock(path):
-                wb.save(path)
+                atomic_save_workbook(wb, path)
             dialog.info(self, '导出成功', f'预警清单已保存到：\n{path}')
         except Exception as e:
             dialog.error(self, '导出失败', str(e))

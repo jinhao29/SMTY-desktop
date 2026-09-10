@@ -10,7 +10,7 @@ import os
 import json
 
 from openpyxl import Workbook, load_workbook
-from file_lock import file_lock
+from file_lock import file_lock, atomic_save_workbook
 from data_exporter import export_summary_excel
 
 # 备份接口 re-export（对外接口不变）
@@ -138,4 +138,4 @@ def generate_import_template(output_path):
     ws.column_dimensions['C'].width = 20
     ws.column_dimensions['D'].width = 16
     with file_lock(output_path):
-        wb.save(output_path)
+        atomic_save_workbook(wb, output_path)

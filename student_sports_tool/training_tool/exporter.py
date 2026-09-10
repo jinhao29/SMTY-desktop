@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from task_model import SinglePlan, WeeklyPlan, Block, DayPlan
-from file_lock import file_lock
+from file_lock import file_lock, atomic_save_workbook
 
 # 统一样式
 THIN = Side(style='thin', color='666666')
@@ -159,7 +159,7 @@ def export_single_excel(plan: SinglePlan, path: str):
 
     ws.freeze_panes = 'A2'
     with file_lock(path):
-        wb.save(path)
+        atomic_save_workbook(wb, path)
     return path
 
 
@@ -189,7 +189,7 @@ def export_weekly_excel(plan: WeeklyPlan, path: str):
     _build_parent_sheet(ws_parent, plan, coach_note)
 
     with file_lock(path):
-        wb.save(path)
+        atomic_save_workbook(wb, path)
     return path
 
 

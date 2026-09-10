@@ -13,7 +13,7 @@ from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
 from excel_builder import read_student_meta
 import lesson_manager as lm
-from file_lock import file_lock
+from file_lock import file_lock, atomic_save_workbook
 
 THIN = Side(style='thin', color='888888')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -154,5 +154,5 @@ def export_summary_excel(dir_path, output_path):
         ws.column_dimensions[chr(64 + i)].width = w
     ws.freeze_panes = 'A2'
     with file_lock(output_path):
-        wb.save(output_path)
+        atomic_save_workbook(wb, output_path)
     return len(students)
