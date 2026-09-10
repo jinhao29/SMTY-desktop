@@ -53,6 +53,10 @@ jobs:
         # 单独成步：鉴权失败时在 CI 页面上一眼可见，不必翻日志
         run: python -m pytest tests/test_auth_guard.py -v
 
+      - name: 诊断（临时）
+        if: always()
+        run: python -m pytest tests/test_zz_diag.py -s -o addopts=
+
       - name: 启动守卫测试
         run: python -m pytest tests/test_startup_guard.py -v
 
