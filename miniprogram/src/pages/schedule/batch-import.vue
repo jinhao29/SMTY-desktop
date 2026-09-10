@@ -60,7 +60,7 @@
 import { ref, computed, reactive } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { lessonApi, coachApi, studentApi } from '../../api'
-import { BASE_URL } from '../../utils/request'
+import { getBaseUrl } from '../../utils/request'
 import { parseSchedule } from '../../utils/schedule-parser'
 import { required } from '../../utils/validator'
 
@@ -128,7 +128,7 @@ function ocrImage() {
     success: ({ tempFilePaths: [path] }) => {
       uni.showLoading({ title: '识别中', mask: true })
       uni.uploadFile({
-        url: BASE_URL + '/api/v1/ocr/image',
+        url: getBaseUrl() + '/api/v1/ocr/image',
         filePath: path, name: 'file',
         header: { Authorization: 'Bearer ' + (uni.getStorageSync('token') || '') },
         success: (res) => {

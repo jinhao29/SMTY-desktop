@@ -34,7 +34,6 @@
 import { ref } from 'vue'
 import { backupApi } from '../../api'
 import { useModeStore } from '../../stores/mode'
-import { BASE_URL } from '../../utils/request'
 
 const modeStore = useModeStore()
 const busy = ref(false)

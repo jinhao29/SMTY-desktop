@@ -84,5 +84,8 @@ miniprogram/server/_backup_before_cred_fix/
 miniprogram/server/server_data/
 miniprogram/node_modules/
 miniprogram/dist/
+# 小程序本地 env 覆盖（含真实域名/密钥时不入库；.env.development/.env.production 是模板，保留）
+miniprogram/.env.local
+miniprogram/.env.*.local
 # 训练工具一次性验证脚本
 training_tool/_verify_*.py

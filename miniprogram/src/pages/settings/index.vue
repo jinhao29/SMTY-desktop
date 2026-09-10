@@ -23,6 +23,14 @@
           {{ isLocal ? '本地模式（数据存本机）' : '服务器 API' }} <text class="arrow">›</text>
         </view>
       </view>
+      <view v-if="!isLocal" class="cell link" @tap="editServerUrl">
+        <view class="cell-label">服务器地址</view>
+        <view class="cell-value url-cell">{{ serverUrl }} <text class="arrow">›</text></view>
+      </view>
+    </view>
+
+    <view v-if="!isLocal && isHttpUrl" class="card">
+      <view class="warn">⚠️ 当前使用 http 明文地址，体验版/正式版会被微信拒绝请求。请改用 https 域名并在小程序后台配置 request 合法域名。</view>
     </view>
 
     <view class="card">
@@ -70,12 +78,42 @@ import { MODES } from '../../utils/constants'
 import { useModeStore } from '../../stores/mode'
 import { useUserStore } from '../../stores/user'
 import { authApi, isLocalMode } from '../../api'
+import { getBaseUrl, setBaseUrl, DEFAULT_BASE_URL } from '../../utils/request'
 
 const modeStore = useModeStore()
 const userStore = useUserStore()
 const user = computed(() => userStore.user)
 const modeInfo = computed(() => MODES[modeStore.mode] || MODES.shangmen)
+// ⚠️ 切数据来源后会 reLaunch，这里每次进入页面重算即可
 const isLocal = computed(() => isLocalMode())
+const serverUrl = computed(() => getBaseUrl())
+const isHttpUrl = computed(() => serverUrl.value.startsWith('http://'))
+
+/** 改服务器地址：写入 storage，官方 request 会优先读它（换服务器无需重新上传代码） */
+function editServerUrl() {
+  uni.showModal({
+    title: '服务器地址',
+    editable: true,
+    placeholderText: DEFAULT_BASE_URL,
+    content: getBaseUrl(),
+    success: (r) => {
+      if (!r.confirm) return
+      const v = (r.content || '').trim()
+      if (!v) {
+        // 空值 = 清除覆盖，回落构建期默认地址
+        setBaseUrl('')
+        uni.showToast({ title: '已恢复默认地址', icon: 'none' })
+        return
+      }
+      if (!/^https?:\/\//.test(v)) {
+        uni.showToast({ title: '需以 http:// 或 https:// 开头', icon: 'none' })
+        return
+      }
+      setBaseUrl(v)
+      uni.showToast({ title: '已保存', icon: 'success' })
+    },
+  })
+}
 
 function go(url) { uni.navigateTo({ url }) }
 // 教练入口 → 管理 tab 页教练段（tab 页不支持带参跳转）

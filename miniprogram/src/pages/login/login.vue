@@ -16,7 +16,6 @@
     <view class="divider"><text>或</text></view>
     <view class="skip-btn" :class="{ disabled: loading }" @tap="skipLogin">跳过登录，进入本地模式</view>
     <view class="tip">本地模式：数据保存在本机，无需服务器，随时可在「数据管理」备份导出</view>
-    <view class="tip server-tip">服务器登录默认账号：13800000000 / 123456</view>
   </view>
 </template>
 
@@ -77,5 +76,4 @@ function skipLogin() {
   background: #F5F7FF; color: #5B6BF7; border-radius: 12px; font-size: 15px; font-weight: 600;
 }
 .tip { text-align: center; font-size: 12px; color: #C0C7D4; margin-top: 24px; line-height: 1.6; }
-.server-tip { margin-top: 8px; }
 </style>
