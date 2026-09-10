@@ -1,42 +1,24 @@
 # -*- coding: utf-8 -*-
-"""临时诊断：定位 CI 上 _collect_protected 返回 0 的原因。用完即删。"""
+"""临时诊断 2：为什么 CI 上业务路由没注册进 app。用完即删。"""
 import sys
 
 
-def test_diag(app_module):
-    app = app_module.app
-    from test_auth_guard import _route_requires_auth
+def test_diag2(app_module):
+    import main
+    from routers import all_routers
 
-    total = 0
-    api = 0
-    dur = 0
-    dep_empty = 0
-    samples = []
-    for route in app.routes:
-        total += 1
-        path = getattr(route, 'path', '')
-        if not path.startswith('/api/'):
-            continue
-        api += 1
-        if _route_requires_auth(route):
-            dur += 1
-        deps = getattr(route, 'dependencies', None)
-        if not deps:
-            dep_empty += 1
-        if len(samples) < 6:
-            samples.append(
-                f'{path} methods={getattr(route, "methods", None)} '
-                f'deps={deps} type={type(route).__name__}')
+    print('\n=== DIAG2 ===')
+    print('sys.path[:4]:', sys.path[:4])
+    print('routers count:', len(all_routers))
+    for r in all_routers:
+        print(f'  router prefix={getattr(r, "prefix", None)!r} '
+              f'routes={len(getattr(r, "routes", []) or [])} '
+              f'type={type(r).__name__} '
+              f'module={type(r).__module__}')
 
-    print('\n=== DIAG ===')
-    print('python:', sys.version.split()[0], sys.platform)
-    print('main module file:', getattr(app_module, '__file__', None))
-    print('app id:', id(app))
-    print('total routes:', total, 'api routes:', api)
-    print('_route_requires_auth True:', dur)
-    print('routes with empty dependencies:', dep_empty)
-    print('main.app.routes is app.routes:', app_module.app.routes is app.routes)
-    for s in samples:
-        print('  ', s)
-    print('app routes sample:', [getattr(r, 'path', '') for r in app.routes[:8]])
-    print('=== END DIAG ===\n')
+    app = main.app
+    print('app.routes len:', len(app.routes))
+    for r in app.routes:
+        print(f'  app route path={getattr(r, "path", None)!r} '
+              f'type={type(r).__name__} module={type(r).__module__}')
+    print('=== END DIAG2 ===\n')
