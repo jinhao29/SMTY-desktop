@@ -238,20 +238,37 @@ PUBLIC_ROUTES = {
 }
 
 
+def _dep_requires_auth(obj) -> bool:
+    """单个依赖对象是否就是 get_current_user。"""
+    fn = getattr(obj, 'dependency', None) or getattr(obj, 'call', None)
+    return fn is not None and getattr(fn, '__name__', '') == 'get_current_user'
+
+
 def _route_requires_auth(route) -> bool:
     """判断路由是否挂了 get_current_user 依赖。
 
     覆盖两种写法：
     - 路由级：APIRouter(..., dependencies=[Depends(get_current_user)])
     - 函数级：def me(user=Depends(get_current_user))
+
+    ⚠️ 必须同时兼容 FastAPI 的两种注册形态：
+    - 旧版（≤0.13x）：include_router 立即把端点展开进 app.routes
+    - 新版（≥0.14x）：include_router 只放一个 _IncludedRouter 占位，端点惰性展开，
+      此时 route.path 为 None，需从 route.include_context.dependencies 取 router 级依赖
     """
     import inspect
 
     # 路由级
     for dep in getattr(route, 'dependencies', []) or []:
-        fn = getattr(dep, 'dependency', None)
-        if fn is not None and getattr(fn, '__name__', '') == 'get_current_user':
+        if _dep_requires_auth(dep):
             return True
+
+    # include_router 上下文里的 router 级依赖（新版 FastAPI 的 _IncludedRouter）
+    ctx = getattr(route, 'include_context', None)
+    if ctx is not None:
+        for dep in getattr(ctx, 'dependencies', []) or []:
+            if _dep_requires_auth(dep):
+                return True
 
     # 函数级：检查端点函数的默认参数里有没有 Depends(get_current_user)
     endpoint = getattr(route, 'endpoint', None)
@@ -262,12 +279,10 @@ def _route_requires_auth(route) -> bool:
             sig = None
         if sig is not None:
             for param in sig.parameters.values():
-                dep = getattr(param.default, 'dependency', None)
-                if dep is not None and getattr(dep, '__name__', '') == 'get_current_user':
+                if _dep_requires_auth(param.default):
                     return True
 
-    # 依赖覆盖（router 级 dependencies 会挂到 route 上，但某些版本放在
-    # route.dependant 里，做一层兜底递归）
+    # 兜底：递归 route.dependant（某些版本把 router 级依赖放在这里）
     dependant = getattr(route, 'dependant', None)
     if dependant is not None:
         stack = [dependant]
@@ -275,28 +290,129 @@ def _route_requires_auth(route) -> bool:
         while stack and seen < 200:
             cur = stack.pop()
             seen += 1
-            call = getattr(cur, 'call', None)
-            if call is not None and getattr(call, '__name__', '') == 'get_current_user':
+            if _dep_requires_auth(cur):
                 return True
             for sub in getattr(cur, 'dependencies', []) or []:
                 stack.append(sub)
     return False
 
 
+def _iter_api_endpoints(app):
+    """版本无关地枚举 (method, path, route) 三元组。
+
+    FastAPI 0.14x 起 include_router 惰性注册（app.routes 里只有 _IncludedRouter
+    占位，path=None）。为确保任何版本下都能真实枚举到端点，这里按优先级尝试：
+
+    1. `routers.all_routers` —— 我们自己的聚合模块，每个 APIRouter 的 .routes
+       始终是完整的 APIRoute 列表，完全不受 FastAPI 版本影响。**首选**。
+    2. app.routes 递归展开 —— 兼容惰性注册形态（读 include_context，
+       以及 _EffectiveRouteContext 的 path/endpoint）。
+    3. app.openapi()['paths'] —— 最后的公开接口兜底。
+    """
+    seen = set()
+
+    # --- 1. 直接遍历我们自己的 router 聚合（最稳）---
+    try:
+        from routers import all_routers
+    except Exception:  # noqa: BLE001
+        all_routers = []
+    for router in all_routers:
+        prefix = getattr(router, 'prefix', '') or ''
+        for route in getattr(router, 'routes', []) or []:
+            sub = getattr(route, 'path', '') or ''
+            # 子路由的 path 在不同 FastAPI 版本下可能已含 / 不含 router prefix，
+            # 这里做幂等拼接：已含前缀就原样用。
+            path = sub if (prefix and sub.startswith(prefix)) else (
+                (prefix + sub).replace('//', '/') or sub)
+            for m in (getattr(route, 'methods', None) or set()):
+                if m in ('HEAD', 'OPTIONS'):
+                    continue
+                key = (m, path)
+                if key not in seen:
+                    seen.add(key)
+                    yield (m, path, route)
+    if seen:
+        return
+
+    # --- 2. app.routes 递归展开（兼容惰性注册）---
+    def _walk(routes, prefix=''):
+        for r in routes:
+            ctx = getattr(r, 'include_context', None)
+            sub_prefix = getattr(ctx, 'prefix', '') if ctx is not None else ''
+            full_prefix = (prefix + sub_prefix).replace('//', '/')
+            inner = getattr(r, 'original_router', None)
+            if inner is not None:
+                yield from _walk(getattr(inner, 'routes', []) or [], full_prefix)
+                continue
+            # _EffectiveRouteContext：带 path / endpoint / methods
+            sub = getattr(r, 'path', None)
+            if sub is None:
+                continue
+            path = (full_prefix + sub).replace('//', '/')
+            for m in (getattr(r, 'methods', None) or set()):
+                if m in ('HEAD', 'OPTIONS'):
+                    continue
+                key = (m, path)
+                if key not in seen:
+                    seen.add(key)
+                    yield (m, path, r)
+
+    yield from _walk(getattr(getattr(app, 'router', app), 'routes', []) or [])
+
+    # --- 3. openapi 兜底 ---
+    if not seen:
+        try:
+            spec = app.openapi()
+        except Exception:  # noqa: BLE001
+            return
+        for path, ops in (spec.get('paths') or {}).items():
+            for m in (ops or {}):
+                mm = m.upper()
+                if mm in ('HEAD', 'OPTIONS', 'PARAMETERS'):
+                    continue
+                key = (mm, path)
+                if key not in seen:
+                    seen.add(key)
+                    yield (mm, path, None)
+
+
 def _collect_protected(app):
     """收集 app 上所有需要鉴权的 (method, path)。"""
     out = []
-    for route in app.routes:
-        path = getattr(route, 'path', '')
+    for m, path, route in _iter_api_endpoints(app):
         if not path.startswith('/api/'):
             continue
-        methods = getattr(route, 'methods', set()) or set()
-        for m in methods:
-            if m in ('HEAD', 'OPTIONS'):
-                continue
-            if _route_requires_auth(route):
-                out.append((m, path))
+        if route is not None and _route_requires_auth(route):
+            out.append((m, path))
+            continue
+        # 新版惰性注册下端点对象与归属 router 分离，用路径前缀回退匹配
+        if route is None and _prefix_is_guarded(path):
+            out.append((m, path))
     return out
+
+
+_GUARDED_PREFIXES = None
+
+
+def _prefix_is_guarded(path: str) -> bool:
+    """路径前缀回退：该端点在业务 router 下即视为受保护。
+
+    仅用于 openapi 兜底（拿不到 route 对象）时的保守判断。
+    """
+    global _GUARDED_PREFIXES
+    if _GUARDED_PREFIXES is None:
+        try:
+            from routers import all_routers
+            _GUARDED_PREFIXES = [
+                (getattr(r, 'prefix', '') or '', bool(getattr(r, 'dependencies', None)))
+                for r in all_routers
+            ]
+        except Exception:  # noqa: BLE001
+            _GUARDED_PREFIXES = []
+    for prefix, guarded in _GUARDED_PREFIXES:
+        if prefix and guarded and path.startswith(prefix):
+            return True
+    return False
 
 
 def test_all_api_routes_guarded(app_module):
@@ -304,22 +420,27 @@ def test_all_api_routes_guarded(app_module):
 
     这条用例是「防新增」的关键 —— 新加一个路由模块忘记挂 dependencies 会直接失败，
     不必等有人真的去未授权访问。
+
+    ⚠️ 必须用 _iter_api_endpoints 而非直接遍历 app.routes：FastAPI 0.14x 起
+    include_router 惰性注册，app.routes 里只有占位对象，直连遍历会「一个端点都
+    没看到」从而假绿（2026-09-10 CI 上实测）。
     """
     app = app_module.app
     unguarded = []
-    for route in app.routes:
-        path = getattr(route, 'path', '')
+    total = 0
+    for m, path, route in _iter_api_endpoints(app):
         if not path.startswith('/api/'):
             continue
-        for m in (getattr(route, 'methods', set()) or set()):
-            if m in ('HEAD', 'OPTIONS'):
-                continue
-            if _route_requires_auth(route):
-                continue
-            # 函数级鉴权（auth.py / ocr.py 的写法）无法从 route.dependencies 看出，
-            # 此时退化为「是否在白名单」判断，未登记即视为漏挂。
-            if (m, path) not in PUBLIC_ROUTES:
-                unguarded.append(f'{m} {path}')
+        total += 1
+        if route is not None and _route_requires_auth(route):
+            continue
+        if (m, path) in PUBLIC_ROUTES:
+            continue
+        unguarded.append(f'{m} {path}')
+
+    assert total >= 30, (
+        f'仅枚举到 {total} 个 /api/ 端点，路由枚举逻辑可能已失效（期望 ≥30）。'
+        '请检查 _iter_api_endpoints 是否兼容当前 FastAPI 版本。')
     assert not unguarded, (
         '以下 API 端点既未挂鉴权，也不在 PUBLIC_ROUTES 白名单中：\n  ' +
         '\n  '.join(sorted(set(unguarded))) +

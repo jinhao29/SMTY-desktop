@@ -1,4 +1,6 @@
 # 小程序后端依赖（冻结主版本，避免上游破坏性升级）
+# ⚠️ FastAPI 0.14x 起 include_router 改为惰性注册（app.routes 不再立即展开端点），
+# 鉴权测试已做版本兼容；CI 用 fastapi 版本矩阵（<0.140 / >=0.140）双跑兜底。
 fastapi>=0.110,<1.0
 uvicorn[standard]>=0.27,<1.0
 pydantic>=2.5,<3.0

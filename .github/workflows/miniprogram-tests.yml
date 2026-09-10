@@ -11,6 +11,12 @@ name: Miniprogram Backend Tests
 #   - test_business_logic.py  费用口径 / 扣课时 / 模式隔离 / 冲突检测
 #
 # 触发：任何改动 miniprogram/server 的推拉请求都必须先过这道门。
+#
+# ⚠️ 2026-09-10 补充：FastAPI 0.14x 起 include_router 改为**惰性注册**
+# （app.routes 里只放 _IncludedRouter 占位，端点不再立即展开）。
+# 旧测试直接遍历 app.routes，在 0.14x 上一个端点都看不到 → 结构性断言假绿。
+# 现在用版本矩阵同时跑「旧行为」与「新行为」，并让 test_auth_guard 的
+# _iter_api_endpoints 兼容两种形态。上游再漂移会立刻在这里暴露。
 on:
   push:
     branches: [ "main", "master" ]
@@ -25,6 +31,15 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        fastapi:
+          - '>=0.110,<0.140'   # 旧行为：include_router 立即展开
+          - '>=0.140,<1.0'     # 新行为：include_router 惰性注册
+
+    name: pytest (fastapi ${{ matrix.fastapi }})
 
     defaults:
       run:
@@ -45,17 +60,14 @@ jobs:
         # ocr 路由在运行时按需 import，鉴权用例无需模型文件）
         run: |
           python -m pip install --upgrade pip
-          pip install 'fastapi>=0.110,<1.0' 'uvicorn[standard]>=0.27,<1.0' \
+          pip install 'fastapi${{ matrix.fastapi }}' 'uvicorn[standard]>=0.27,<1.0' \
                       'pydantic>=2.5,<3.0' 'python-multipart>=0.0.9,<1.0' \
                       pytest httpx
+          python -c "import fastapi; print('fastapi', fastapi.__version__)"
 
       - name: 鉴权回归测试（最高优先级）
         # 单独成步：鉴权失败时在 CI 页面上一眼可见，不必翻日志
         run: python -m pytest tests/test_auth_guard.py -v
-
-      - name: 诊断（临时）
-        if: always()
-        run: python -m pytest tests/test_zz_diag.py -s -o addopts=
 
       - name: 启动守卫测试
         run: python -m pytest tests/test_startup_guard.py -v
