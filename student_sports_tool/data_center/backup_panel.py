@@ -200,6 +200,10 @@ class BackupPanel(QWidget):
         ops_grid.addWidget(self.btn_auto_backup, 1, 2)
         ops_grid.addWidget(self.btn_mp_export, 2, 0)
         ops_grid.addWidget(self.btn_mp_import, 2, 1)
+        # 售后支持：远程排查入口（日志在 %USERPROFILE%\.shangmentiyu\app.log）
+        self.btn_log_dir = QPushButton('打开日志文件夹（远程排查用）', objectName='tertiary')
+        self.btn_log_dir.clicked.connect(self.on_open_log_folder)
+        ops_grid.addWidget(self.btn_log_dir, 2, 2)
         for c in range(3):
             ops_grid.setColumnStretch(c, 1)
         ol.addLayout(ops_grid)
@@ -525,6 +529,16 @@ class BackupPanel(QWidget):
             return str(get_current_mode() or 'shangmen')
         except Exception:
             return 'shangmen'
+
+    def on_open_log_folder(self):
+        """远程排查入口：打开运行日志所在文件夹（app.log 由 RotatingFileHandler 写入）。"""
+        log_dir = os.path.join(os.path.expanduser('~'), '.shangmentiyu')
+        os.makedirs(log_dir, exist_ok=True)
+        try:
+            os.startfile(log_dir)  # noqa: only Windows
+            self._log(f'已打开日志文件夹：{log_dir}')
+        except Exception as e:
+            self._log(f'✗ 打开日志文件夹失败：{e}（请手动访问 {log_dir}）')
 
     def on_miniprogram_export(self):
         """导出小程序备份 JSON（后台线程）。"""

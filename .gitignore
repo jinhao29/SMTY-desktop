@@ -89,3 +89,14 @@ miniprogram/.env.local
 miniprogram/.env.*.local
 # 训练工具一次性验证脚本
 training_tool/_verify_*.py
+
+# === 2026-09-12 阶段七收口（D4 决策：报告类文件不入库）===
+# 根目录报告类产物（*.html 与审计类 *.md）统一移 docs/reports/ 本地保存
+/*.html
+/audit_*.md
+/*_audit_*.md
+/fix_report_*.md
+# 报告归档目录本身不入库（时效性产物）
+/docs/reports/
+# pytest 临时产物
+student_sports_tool/_junit.xml
