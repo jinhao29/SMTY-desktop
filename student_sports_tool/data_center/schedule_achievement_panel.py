@@ -17,11 +17,12 @@
 import modern_dialog as dialog
 import logging
 import os
+import sys
 from datetime import datetime
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QComboBox, QLabel, QLineEdit, QFileDialog, QMessageBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QSplitter
 )
@@ -30,16 +31,28 @@ from PySide6.QtCharts import (
     QValueAxis, QLineSeries
 )
 
+# 注入父目录（student_sports_tool/）与 training_tool 设计资产目录
+# （styles/cards 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, os.path.join(_ROOT, 'training_tool'), _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from worker_pool import BaseWorker, run_worker
+# 新设计语言令牌与组件（灰白简约 · 珊瑚橙强调）
+from styles import Palette
+from cards import Card
 
 
-# 浅色珊瑚橙主题配色（与 chart_renderer 保持一致）
-COLOR_PLANNED = '#FF6B47'    # 计划：珊瑚橙
-COLOR_ACTUAL = '#22c55e'     # 实际：绿
-COLOR_ABSENT = '#ef4444'     # 缺勤：红
-COLOR_GRID = '#E5E5E5'
-COLOR_TEXT = '#6B6B6B'
-COLOR_BG = '#F5F7FA'
+# 图表语义配色（对齐设计令牌；达成率紫无对应令牌保留字面值）
+COLOR_PLANNED = Palette.ACCENT   # 计划：珊瑚橙
+COLOR_ACTUAL = Palette.GREEN     # 实际：绿
+COLOR_ABSENT = Palette.RED       # 缺勤：红
+COLOR_GRID = Palette.DIVIDER
+COLOR_TEXT = Palette.TEXT_SUB
+COLOR_BG = Palette.CARD          # 图表底：适配卡片白底
+COLOR_RATE = '#a855f7'           # 达成率折线/指标：紫（无对应令牌）
 
 
 class AchievementWorker(BaseWorker):
@@ -88,15 +101,14 @@ class ScheduleAchievementPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
 
         # === 顶部控制栏 ===
-        gb_ctrl = QGroupBox('分析参数')
-        gb_ctrl.setObjectName('card')
-        cl = QHBoxLayout(gb_ctrl)
+        card_ctrl = Card('分析参数')
+        cl = QHBoxLayout()
+        cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(10)
 
         cl.addWidget(QLabel('Android 备份 zip：'))
         self.le_zip = QLineEdit()
         self.le_zip.setPlaceholderText('自动使用双端同步的最新手机备份，也可手动选择')
-        self.le_zip.setStyleSheet('color:#1A1A1A;')
         cl.addWidget(self.le_zip, 1)
 
         self.btn_pick_zip = QPushButton('选择', objectName='secondary')
@@ -124,39 +136,42 @@ class ScheduleAchievementPanel(QWidget):
         self.btn_export_png.setEnabled(False)
         cl.addWidget(self.btn_export_png)
 
-        lay.addWidget(gb_ctrl)
+        card_ctrl.set_content_layout(cl)
+        lay.addWidget(card_ctrl)
 
         # === 概览卡片：计划/实际/缺勤/达成率 ===
-        gb_overview = QGroupBox('本月概览')
-        gb_overview.setObjectName('card')
-        ol = QHBoxLayout(gb_overview)
+        card_overview = Card('本月概览')
+        ol = QHBoxLayout()
+        ol.setContentsMargins(0, 0, 0, 0)
         ol.setSpacing(10)
         self.lbl_planned = self._make_metric_card(ol, '计划排课', '0', COLOR_PLANNED)
         self.lbl_actual = self._make_metric_card(ol, '实际签到', '0', COLOR_ACTUAL)
         self.lbl_absent = self._make_metric_card(ol, '缺勤次数', '0', COLOR_ABSENT)
-        self.lbl_rate = self._make_metric_card(ol, '达成率', '0.0%', '#a855f7')
-        lay.addWidget(gb_overview)
+        self.lbl_rate = self._make_metric_card(ol, '达成率', '0.0%', COLOR_RATE)
+        card_overview.set_content_layout(ol)
+        lay.addWidget(card_overview)
 
         # === 图表 + 明细表（左右分栏） ===
         splitter = QSplitter(Qt.Horizontal)
 
         # 左侧：图表
-        gb_chart = QGroupBox('训练达成率柱状图（按学员）')
-        gb_chart.setObjectName('card')
-        chl = QVBoxLayout(gb_chart)
+        card_chart = Card('训练达成率柱状图（按学员）')
+        chl = QVBoxLayout()
+        chl.setContentsMargins(0, 0, 0, 0)
         self.chart_view = QChartView()
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         # 全局 QSS 的像素字号会让 QtCharts 内部 setPointSize 收到 -1 报警，
         # 与 report_panel 同款：视图上用 pt 字号覆盖
-        self.chart_view.setStyleSheet('font-size: 10.5pt; background: #FFFFFF;')
+        self.chart_view.setStyleSheet(f'font-size: 10.5pt; background: {Palette.CARD};')
         self.chart_view.setMinimumHeight(320)
         chl.addWidget(self.chart_view)
-        splitter.addWidget(gb_chart)
+        card_chart.set_content_layout(chl)
+        splitter.addWidget(card_chart)
 
         # 右侧：明细表
-        gb_detail = QGroupBox('学员明细')
-        gb_detail.setObjectName('card')
-        dl = QVBoxLayout(gb_detail)
+        card_detail = Card('学员明细')
+        dl = QVBoxLayout()
+        dl.setContentsMargins(0, 0, 0, 0)
         self.tbl_detail = QTableWidget(0, 5)
         self.tbl_detail.setHorizontalHeaderLabels(
             ['学员', '计划', '实际', '缺勤', '达成率']
@@ -164,22 +179,24 @@ class ScheduleAchievementPanel(QWidget):
         self.tbl_detail.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tbl_detail.setEditTriggers(QTableWidget.NoEditTriggers)
         dl.addWidget(self.tbl_detail)
-        splitter.addWidget(gb_detail)
+        card_detail.set_content_layout(dl)
+        splitter.addWidget(card_detail)
 
         splitter.setSizes([520, 380])
         lay.addWidget(splitter, 1)
 
         # === 缺勤明细 ===
-        gb_absent = QGroupBox('缺勤明细（计划了但未签到）')
-        gb_absent.setObjectName('card')
-        al = QVBoxLayout(gb_absent)
+        card_absent = Card('缺勤明细（计划了但未签到）')
+        al = QVBoxLayout()
+        al.setContentsMargins(0, 0, 0, 0)
         self.tbl_absent = QTableWidget(0, 3)
         self.tbl_absent.setHorizontalHeaderLabels(['学员', '日期', '计划内容'])
         self.tbl_absent.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tbl_absent.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tbl_absent.setMinimumHeight(140)
         al.addWidget(self.tbl_absent)
-        lay.addWidget(gb_absent)
+        card_absent.set_content_layout(al)
+        lay.addWidget(card_absent)
 
         # === v23.5：面板打开即自动填充双端同步的最新手机备份 ===
         self._autodetect_backup(quiet=True)
@@ -216,8 +233,8 @@ class ScheduleAchievementPanel(QWidget):
         card = QWidget()
         card.setStyleSheet(f"""
             QWidget {{
-                background: #FFFFFF;
-                border: 1px solid #E5E5E5;
+                background: {Palette.CARD};
+                border: 1px solid {Palette.DIVIDER};
                 border-radius: 10px;
                 padding: 12px 8px;
             }}
@@ -226,7 +243,10 @@ class ScheduleAchievementPanel(QWidget):
         v.setContentsMargins(8, 6, 8, 6)
         v.setSpacing(4)
         lbl_title = QLabel(title)
-        lbl_title.setStyleSheet('color:#6B6B6B; font-size:11px; border:none; background:transparent;')
+        lbl_title.setStyleSheet(
+            f'color:{Palette.TEXT_SUB}; font-size:11px; '
+            f'border:none; background:transparent;'
+        )
         lbl_title.setAlignment(Qt.AlignCenter)
         v.addWidget(lbl_title)
         lbl_val = QLabel(value)
@@ -396,7 +416,7 @@ class ScheduleAchievementPanel(QWidget):
         if len(show_list) > 0:
             line_series = QLineSeries()
             line_series.setName('达成率')
-            pen = QPen(QColor('#a855f7'), 2)
+            pen = QPen(QColor(COLOR_RATE), 2)
             line_series.setPen(pen)
             for i, item in enumerate(show_list):
                 rate = item.get('rate', 0.0) or 0.0

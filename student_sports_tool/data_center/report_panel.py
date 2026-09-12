@@ -15,19 +15,32 @@ M4-S3 改造：
 """
 import modern_dialog as dialog
 import os
+import sys
 import logging
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QComboBox, QLabel, QTextEdit, QFileDialog, QMessageBox,
     QSplitter, QProgressBar
 )
 from PySide6.QtCharts import QChartView, QChart
 
+# 注入父目录（student_sports_tool/）与 training_tool 设计资产目录
+# （styles/cards 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, os.path.join(_ROOT, 'training_tool'), _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import report_coordinator as rco
 from chart_renderer import create_trend_chart
 from archive_manager import scan_student_files
 from worker_pool import BaseWorker, run_worker
+# 新设计语言令牌与组件（灰白简约 · 珊瑚橙强调）
+from styles import Palette
+from cards import Card
 
 
 #==== 后台 Worker ====
@@ -80,9 +93,9 @@ class ReportPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
 
         # 顶部：学员选择 + 操作按钮
-        gb_top = QGroupBox('选择学员与测评')
-        gb_top.setObjectName('card')
-        tl = QHBoxLayout(gb_top)
+        card_top = Card('选择学员与测评')
+        tl = QHBoxLayout()
+        tl.setContentsMargins(0, 0, 0, 0)
         tl.setSpacing(10)
         tl.addWidget(QLabel('学员：'))
         self.cb_student = QComboBox()
@@ -109,42 +122,45 @@ class ReportPanel(QWidget):
         self.btn_auto_comment = QPushButton('自动生成评语', objectName='secondary')
         self.btn_auto_comment.clicked.connect(self.on_auto_comment)
         tl.addWidget(self.btn_auto_comment)
-        lay.addWidget(gb_top)
+        card_top.set_content_layout(tl)
+        lay.addWidget(card_top)
 
         # 主体：左图表预览 / 右评语
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(8)
 
         # 左：图表
-        gb_chart = QGroupBox('总分趋势预览')
-        gb_chart.setObjectName('card')
-        cl = QVBoxLayout(gb_chart)
+        card_chart = Card('总分趋势预览')
+        cl = QVBoxLayout()
+        cl.setContentsMargins(0, 0, 0, 0)
         self.chart_view = QChartView()
         # 全局 QSS 的 font-size:14px（像素字号）会让 QtCharts 内部 QFont pointSize=-1，
         # 每次 chart 渲染都刷 "QFont::setPointSize: Point size <= 0 (-1)" 警告；
         # 此处用 pt 单位覆盖（pt 会映射为合法 pointSize），警告消除
-        self.chart_view.setStyleSheet('font-size: 10.5pt; background: #F5F7FA;')
+        self.chart_view.setStyleSheet(f'font-size: 10.5pt; background: {Palette.CARD};')
         self.chart_view.setMinimumHeight(300)
         cl.addWidget(self.chart_view)
-        splitter.addWidget(gb_chart)
+        card_chart.set_content_layout(cl)
+        splitter.addWidget(card_chart)
 
         # 右：评语
-        gb_comment = QGroupBox('教练评语（可编辑）')
-        gb_comment.setObjectName('card')
-        cml = QVBoxLayout(gb_comment)
+        card_comment = Card('教练评语（可编辑）')
+        cml = QVBoxLayout()
+        cml.setContentsMargins(0, 0, 0, 0)
         self.te_comment = QTextEdit()
         self.te_comment.setPlaceholderText('点击"自动生成评语"或手动输入...')
         cml.addWidget(self.te_comment)
-        splitter.addWidget(gb_comment)
+        card_comment.set_content_layout(cml)
+        splitter.addWidget(card_comment)
 
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         lay.addWidget(splitter, 1)
 
         # 底部导出
-        gb_export = QGroupBox('导出报告')
-        gb_export.setObjectName('card')
-        el = QVBoxLayout(gb_export)
+        card_export = Card('导出报告')
+        el = QVBoxLayout()
+        el.setContentsMargins(0, 0, 0, 0)
         el.setSpacing(8)
 
         # 进度条（M4-S3 新增）
@@ -161,7 +177,8 @@ class ReportPanel(QWidget):
         self.btn_export.clicked.connect(self.on_export_pdf)
         row_export.addWidget(self.btn_export)
         el.addLayout(row_export)
-        lay.addWidget(gb_export)
+        card_export.set_content_layout(el)
+        lay.addWidget(card_export)
 
     #==== 公共接口 ====
 
@@ -256,6 +273,8 @@ class ReportPanel(QWidget):
             return
         try:
             chart = create_trend_chart(self._records)
+            # chart_renderer 默认灰底，这里适配卡片白底
+            chart.setBackgroundBrush(QColor(Palette.CARD))
             self.chart_view.setChart(chart)
         except Exception as e:
             dialog.warn(self, '预览失败', str(e))

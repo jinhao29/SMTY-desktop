@@ -15,6 +15,7 @@
 """
 import modern_dialog as dialog
 import os
+import sys
 from datetime import datetime
 
 from PySide6.QtCore import Qt
@@ -23,6 +24,16 @@ from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QPushButton, QListWidget, QListWidgetItem, QMessageBox, QSizePolicy
 )
+
+# 注入父目录（student_sports_tool/）与 training_tool 设计资产目录
+# （styles 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, os.path.join(_ROOT, 'training_tool'), _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from styles import Palette
 
 import db_snapshot_manager as dsm
 
@@ -68,7 +79,7 @@ class DbSnapshotDialog(QDialog):
             '拖动下方滑条或选择列表项，即可回滚到任意历史状态。\n'
             '回滚前会自动生成一份"保护快照"，可随时撤回。'
         )
-        desc.setStyleSheet('color:#6B6B6B; font-size:12px;')
+        desc.setStyleSheet(f'color:{Palette.TEXT_SUB}; font-size:12px;')
         desc.setWordWrap(True)
         lay.addWidget(desc)
 
@@ -83,36 +94,36 @@ class DbSnapshotDialog(QDialog):
         slider_row.addWidget(self.slider, 1)
         self.lbl_slider_pos = QLabel('—')
         self.lbl_slider_pos.setMinimumWidth(160)
-        self.lbl_slider_pos.setStyleSheet('color:#6B6B6B; font-size:12px;')
+        self.lbl_slider_pos.setStyleSheet(f'color:{Palette.TEXT_SUB}; font-size:12px;')
         slider_row.addWidget(self.lbl_slider_pos)
         lay.addLayout(slider_row)
 
         # 快照列表
         list_label = QLabel('可用快照（按时间倒序）：')
-        list_label.setStyleSheet('color:#6B6B6B; font-size:12px;')
+        list_label.setStyleSheet(f'color:{Palette.TEXT_SUB}; font-size:12px;')
         lay.addWidget(list_label)
 
         self.list_widget = QListWidget()
-        self.list_widget.setStyleSheet("""
-            QListWidget {
-                background: #FFFFFF;
-                color: #1A1A1A;
-                border: 1px solid #E5E5E5;
+        self.list_widget.setStyleSheet(f"""
+            QListWidget {{
+                background: {Palette.CARD};
+                color: {Palette.TEXT};
+                border: 1px solid {Palette.DIVIDER};
                 border-radius: 10px;
                 padding: 6px;
                 font-size: 12px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 padding: 8px 10px;
                 border-radius: 6px;
-            }
-            QListWidget::item:selected {
-                background: #FFEDE8;
-                color: #FF6B47;
-            }
-            QListWidget::item:hover {
-                background: #F8F8F8;
-            }
+            }}
+            QListWidget::item:selected {{
+                background: {Palette.ACCENT_LIGHT};
+                color: {Palette.ACCENT};
+            }}
+            QListWidget::item:hover {{
+                background: {Palette.TAG_BG};
+            }}
         """)
         self.list_widget.currentRowChanged.connect(self._on_list_changed)
         lay.addWidget(self.list_widget, 1)
@@ -120,8 +131,9 @@ class DbSnapshotDialog(QDialog):
         # 详情区
         self.lbl_detail = QLabel('')
         self.lbl_detail.setStyleSheet(
-            'color:#6B6B6B; font-size:11px; padding:8px 10px;'
-            'background:#FFFFFF; border:1px solid #E5E5E5; border-radius:8px;'
+            f'color:{Palette.TEXT_SUB}; font-size:11px; padding:8px 10px;'
+            f'background:{Palette.CARD}; border:1px solid {Palette.DIVIDER};'
+            f'border-radius:8px;'
         )
         self.lbl_detail.setWordWrap(True)
         self.lbl_detail.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
