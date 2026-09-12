@@ -10,13 +10,16 @@ import os
 import json
 import tempfile
 from file_lock import file_lock
+# 续费阈值默认值与 renewal_processor 的跨端对齐常量保持单一真源
+# （此前这里硬编码 5，会覆盖 renewal_coordinator 的兜底值，导致双端阈值实际上没对齐）
+from renewal_processor import DEFAULT_RENEWAL_THRESHOLD, DEFAULT_INACTIVE_DAYS
 
 CONFIG_FILE = '_data_center_config.json'
 
 # 默认配置
 DEFAULTS = {
-    'renewal_threshold': 5,       # 续费预警阈值（剩余课时 <= 此值时提醒）
-    'inactive_days': 14,          # 长期未上课天数阈值
+    'renewal_threshold': DEFAULT_RENEWAL_THRESHOLD,  # 续费预警阈值（剩余课时 <= 此值时提醒）
+    'inactive_days': DEFAULT_INACTIVE_DAYS,          # 长期未上课天数阈值
     'last_archive_dir': '',       # 上次使用的档案目录
     # 优化4新增：手机备份同步目录（教练手机备份后通过数据线/WiFi 传到电脑的目录）
     # auto_sync 模块每分钟扫描此目录，发现新 .zip 自动恢复并托盘通知

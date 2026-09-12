@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""mode_guard：租户隔离守卫（v23.12）。"""
+"""mode_guard：租户隔离守卫。
+
+v23.13 起判定改为配置驱动（config/modes.json），模式 id 用新命名：
+俱乐部 = 'club_evolve'（旧值 'club' 经 aliases 解析）。
+"""
 import json
 import os
 import sys
@@ -31,13 +35,19 @@ def test_dir_mode_coaching():
 
 
 def test_dir_mode_club():
-    assert dir_mode(r'C:/Users/x/Desktop/学员档案俱乐部') == 'club'
+    assert dir_mode(r'C:/Users/x/Desktop/学员档案俱乐部') == 'club_evolve'
 
 
 def test_backup_mode_new_and_legacy():
-    assert backup_mode(_make_backup('club')) == 'club'
+    # 手机端现阶段仍写旧值 'club' → 必须解析到 club_evolve
+    assert backup_mode(_make_backup('club')) == 'club_evolve'
+    assert backup_mode(_make_backup('club_evolve')) == 'club_evolve'
     assert backup_mode(_make_backup('coaching')) == 'coaching'
     assert backup_mode(_make_backup(None)) == 'coaching'  # 旧版备份无标记
+
+
+def test_backup_mode_unknown_value_falls_back():
+    assert backup_mode(_make_backup('garbage')) == 'coaching'
 
 
 def test_check_same_mode_pass():
@@ -59,6 +69,7 @@ if __name__ == '__main__':
     test_dir_mode_coaching()
     test_dir_mode_club()
     test_backup_mode_new_and_legacy()
+    test_backup_mode_unknown_value_falls_back()
     test_check_same_mode_pass()
     test_check_mismatch_rejected()
     print('MODE GUARD TESTS PASS')

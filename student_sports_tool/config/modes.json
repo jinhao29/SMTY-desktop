@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "default_mode": "coaching",
+  "use_config": true,
+  "modes": [
+    {
+      "id": "coaching",
+      "display_name": "上门体育",
+      "db_name": "sports_coach_db",
+      "archive_dir": "学员档案",
+      "enabled": true,
+      "aliases": {
+        "primary": "coaching",
+        "coach": "coaching",
+        "上门体育": "coaching"
+      },
+      "window_title": "上门体育教学管理平台",
+      "nav_title": "上门体育",
+      "tagline": "学员档案 · 课时排课 · 财务记账 · 数据中心",
+      "badge": "常用",
+      "accent": "#10B981",
+      "icon": "stopwatch"
+    },
+    {
+      "id": "club_evolve",
+      "display_name": "EVOLVE 俱乐部",
+      "db_name": "sports_coach_club_db",
+      "archive_dir": "学员档案俱乐部",
+      "enabled": true,
+      "aliases": {
+        "club": "club_evolve",
+        "俱乐部": "club_evolve",
+        "evolve": "club_evolve"
+      },
+      "window_title": "俱乐部管理平台",
+      "nav_title": "俱乐部",
+      "tagline": "EVOLVE 进化体育 · 独立数据空间，与上门体育完全隔离",
+      "badge": "NEW",
+      "accent": "#047857",
+      "icon": "bolt"
+    }
+  ]
+}

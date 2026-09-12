@@ -23,7 +23,7 @@ PySide6 的 Qt 事件循环与 pytest 的全局 stdout capture 冲突：
 
 期望基线
 --------
-16 个测试文件，164 passed（test_db_snapshot_scope.py 单独运行收集为 0，属预期）。
+17 个测试文件，204 passed（test_db_snapshot_scope.py 单独运行收集为 0，属预期）。
 基线变更时请同步更新本注释与 README/文档。
 """
 import os
@@ -35,7 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE) if os.path.basename(HERE) in ('Py', 'py') else HERE
 
 # 期望基线（passed 数）；用于快速判断是否引入回归
-EXPECTED_TOTAL = 164
+EXPECTED_TOTAL = 204
 
 
 def discover_tests() -> list:

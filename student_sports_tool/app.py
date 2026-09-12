@@ -100,6 +100,8 @@ import tray_notifier
 from auto_sync import AutoSyncManager
 # 优化6新增：GitHub 自动更新
 from update_dialog import check_update_on_startup
+# v23.13 配置化：工作模式清单 / 档案目录 / 显示文案统一来自 config/modes.json
+from data_center import mode_config
 
 # 全局浅色珊瑚橙主题（与 Android 端视觉统一）
 GLOBAL_QSS = LIGHT_QSS
@@ -130,10 +132,13 @@ class App(QMainWindow):
 
     def __init__(self, mode: str = 'coaching'):
         super().__init__()
-        # v23.12：工作模式（'coaching' 上门体育 / 'club' 俱乐部）。
-        # 俱乐部模式 = 独立档案目录（物理隔离），业务层零改动。
-        self.mode = mode
-        self.setWindowTitle('俱乐部管理平台' if mode == 'club' else '上门体育教学管理平台')
+        # v23.13：工作模式配置化（清单见 config/modes.json）。
+        # 传入的旧值经 aliases 解析（club → club_evolve），无法解析回退 default_mode；
+        # 每个模式对应独立档案目录（物理隔离），业务层零改动。
+        self.mode = mode_config.resolve_alias(mode) or mode_config.default_mode()
+        self._mode_def = mode_config.get_mode(self.mode) or {}
+        self.setWindowTitle(
+            self._mode_def.get('window_title') or '上门体育教学管理平台')
         # 根据屏幕可用尺寸自适应设置窗口初始大小
         screen = QApplication.primaryScreen()
         if screen is not None:
@@ -168,7 +173,7 @@ class App(QMainWindow):
         ]
         self.side_nav = SideNav(
             menu_items,
-            title='俱乐部' if mode == 'club' else '上门体育')
+            title=self._mode_def.get('nav_title') or '上门体育')
         self.side_nav.navChanged.connect(self._on_page_changed)
         self.side_nav.searchSubmitted.connect(self._on_global_search)
         self.side_nav.helpRequested.connect(self._on_help)
@@ -192,12 +197,11 @@ class App(QMainWindow):
 
         # === 创建各业务页面并加入 QStackedWidget ===
         # 注意：archive_win 必须先创建，因为其他页面依赖 archive_dir_getter
-        # v23.12：俱乐部模式传入独立档案目录（数据物理隔离）
-        if mode == 'club':
-            from mode_selector import ensure_club_dir
-            self.archive_win = archive_mod.MainWindow(initial_dir=ensure_club_dir())
-        else:
-            self.archive_win = archive_mod.MainWindow()
+        # v23.13：档案目录统一由配置解析 —— 此前是 `if mode == 'club'` 硬编码判定，
+        # 新增机构（如 club_xx）会掉进 else 分支拿到默认目录 → 串库。
+        # 目录不存在时自动创建（各 storage 的 xlsx 骨架仍按需建）。
+        self.archive_win = archive_mod.MainWindow(
+            initial_dir=mode_config.ensure_archive_dir(self.mode))
         archive_widget = self.archive_win.takeCentralWidget()
 
         # Page 0：首页（概览数据直接读档案目录，不再依赖占位）
@@ -669,7 +673,19 @@ def main():
     app.setStyleSheet(GLOBAL_QSS)
     _f = QFont('Inter'); _f.setPointSize(10)
     app.setFont(_f)
-    # 启动模式选择：上门体育 / 俱乐部（v23.12，俱乐部数据独立目录物理隔离）
+    # v23.13：模式配置自检 —— 配置重复 id/db_name/archive_dir 时直接拒绝启动。
+    # 带着错误配置继续跑会让两个机构落到同一份数据，比启动失败严重得多；
+    # 配置**缺失或损坏**不算致命（mode_config 内部回退内置默认值）。
+    try:
+        mode_config.validate_or_raise()
+    except mode_config.ModeConfigError as e:
+        logging.error('模式配置非法，拒绝启动：%s', e)
+        dialog.error(
+            None, '模式配置错误',
+            '模式配置文件不合法，无法启动：\n\n%s\n\n'
+            '请修正 %s 后重试。' % (e, mode_config.config_path()))
+        sys.exit(2)
+    # 启动模式选择（卡片清单与文案来自配置）
     from mode_selector import run_selector, save_mode
     mode = run_selector()
     if mode is None:

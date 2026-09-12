@@ -22,7 +22,11 @@ from PySide6.QtWidgets import (
     QWidget
 )
 
-PRIMARY = '#10B981'      # EVOLVE 绿
+# v23.13 配置化：模式清单 / 档案目录 / 显示文案统一来自 config/modes.json
+# （新增机构只需在配置里加一项，本文件无需改动）
+from data_center import mode_config
+
+PRIMARY = '#10B981'      # EVOLVE 绿（配置未指定 accent 时的兜底色）
 PRIMARY_HOVER = '#0EA371'
 SELECTED_BG = '#F0FBF6'  # 选中浅绿底
 TEXT = '#1A1A1A'
@@ -130,7 +134,7 @@ class ModeCard(QWidget):
 
 
 class ModeSelector(QDialog):
-    """启动模式选择对话框。exec() 返回 'coaching' / 'club' / None(退出)。"""
+    """启动模式选择对话框。exec() 返回所选模式 id（如 coaching / club_evolve）/ None(退出)。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -153,12 +157,15 @@ class ModeSelector(QDialog):
 
         row = QHBoxLayout()
         row.setSpacing(16)
-        self._cards = [
-            ModeCard('上门体育', '学员档案 · 课时排课 · 财务记账 · 数据中心',
-                     '常用', PRIMARY, 'stopwatch'),
-            ModeCard('俱乐部', 'EVOLVE 进化体育 · 独立数据空间，与上门体育完全隔离',
-                     'NEW', '#047857', 'bolt'),
-        ]
+        # v23.13 配置化：卡片由 config/modes.json 生成
+        # （新增机构只改配置即可出现在选择页，本文件零改动）
+        self._cards = []
+        self._card_mode_ids = []
+        for m in mode_config.get_all_modes():
+            self._cards.append(ModeCard(
+                m['display_name'], m.get('tagline', ''), m.get('badge', ''),
+                m.get('accent') or PRIMARY, m.get('icon') or 'stopwatch'))
+            self._card_mode_ids.append(m['id'])
         for c in self._cards:
             row.addWidget(c, 1)
         root.addLayout(row)
@@ -239,7 +246,7 @@ class ModeSelector(QDialog):
         for c in self._cards:
             c._selected = c is card
             c.update()
-        self.choice = 'coaching' if card is self._cards[0] else 'club'
+        self.choice = self._card_mode_ids[self._cards.index(card)]
         self._set_enter_enabled(True)
 
     def confirm(self):
@@ -247,52 +254,46 @@ class ModeSelector(QDialog):
 
 
 # ============================================================
-# 模式持久化 + 俱乐部数据目录（v23.12 多租户·物理隔离）
+# 模式持久化 + 档案目录（v23.13 配置化，清单见 config/modes.json）
+# 当前模式存于 ~/.shangmentiyu/app_mode.json，读写统一走 mode_config
 # ============================================================
 
-_MODE_FILE = os.path.join(os.path.expanduser('~'), '.shangmentiyu', 'app_mode.json')
+
+def mode_archive_dir(mode_id: str) -> str:
+    """指定模式的档案目录（配置驱动，位于 ~/Desktop/<archive_dir>）。"""
+    return mode_config.archive_dir_for(mode_id)
 
 
 def club_archive_dir() -> str:
-    """俱乐部档案目录（单俱乐部阶段：Desktop\\学员档案俱乐部）。
+    """俱乐部（club_evolve）档案目录。保留旧函数名以兼容既有调用方。"""
+    return mode_config.archive_dir_for('club_evolve')
 
-    与上门体育的 Desktop\\学员档案 平级，物理隔离零串库。
-    """
-    return os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案俱乐部')
+
+def ensure_archive_dir(mode_id: str) -> str:
+    """确保指定模式的档案目录存在并返回路径。"""
+    return mode_config.ensure_archive_dir(mode_id)
 
 
 def ensure_club_dir() -> str:
-    """确保俱乐部目录存在（首次自动创建；xlsx 骨架由各 storage 的 ensure 逻辑按需建）。"""
-    d = club_archive_dir()
-    os.makedirs(d, exist_ok=True)
-    return d
+    """确保俱乐部（club_evolve）档案目录存在。保留旧函数名以兼容既有调用方。"""
+    return mode_config.ensure_archive_dir('club_evolve')
 
 
 def load_last_mode() -> str:
-    """上次使用的模式（'coaching' / 'club'；无记录返回 'coaching'）。"""
-    try:
-        import json
-        with open(_MODE_FILE, encoding='utf-8') as f:
-            return json.load(f).get('mode') or 'coaching'
-    except Exception:
-        return 'coaching'
+    """上次使用的模式 id（旧值经 aliases 解析，解析失败回退 default_mode）。"""
+    return mode_config.get_current_mode()
 
 
 def save_mode(mode: str):
-    try:
-        import json
-        os.makedirs(os.path.dirname(_MODE_FILE), exist_ok=True)
-        with open(_MODE_FILE, 'w', encoding='utf-8') as f:
-            json.dump({'mode': mode}, f, ensure_ascii=False)
-    except Exception:
-        pass
+    """保存当前模式 id。"""
+    mode_config.set_current_mode(mode)
 
 
 def run_selector() -> str:
-    """独立入口：弹出选择页，返回 'coaching' / 'club' / None(退出)。
+    """独立入口：弹出选择页，返回所选模式 id / None(退出)。
 
-    俱乐部模式 = 独立档案目录（ensure_club_dir 自动创建）跑同一套功能，
-    数据与上门体育完全隔离（v23.12 多租户·物理隔离）。
+    每个模式 = 独立档案目录（配置的 archive_dir，首次自动创建）跑同一套功能，
+    数据互相隔离（多租户·物理隔离；模式清单见 config/modes.json）。
     """
     app = QApplication.instance() or QApplication(sys.argv)
     import theme
