@@ -15,6 +15,7 @@ M4-S2 改造：
 import modern_dialog as dialog
 import logging
 import os
+from datetime import datetime
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QPushButton,
@@ -99,6 +100,38 @@ class ImportStudentsWorker(BaseWorker):
         self.emit_finished({'created': created, 'conflicts': conflicts})
 
 
+class MiniprogramExportWorker(BaseWorker):
+    """导出小程序备份 JSON Worker（阶段五互通）。"""
+
+    def __init__(self, dir_path, mode, output_path):
+        super().__init__()
+        self.dir_path = dir_path
+        self.mode = mode
+        self.output_path = output_path
+
+    def run_task(self):
+        cb = self.make_progress_cb()
+        result = bc.export_miniprogram_backup(self.dir_path, self.mode,
+                                              self.output_path, cb)
+        self.emit_progress(100, f'✓ 导出完成：{result["students"]} 位学员')
+        self.emit_finished(result)
+
+
+class MiniprogramImportWorker(BaseWorker):
+    """导入小程序备份 JSON Worker（阶段五互通）。"""
+
+    def __init__(self, import_path, dir_path):
+        super().__init__()
+        self.import_path = import_path
+        self.dir_path = dir_path
+
+    def run_task(self):
+        cb = self.make_progress_cb()
+        result = bc.import_miniprogram_backup(self.import_path, self.dir_path, cb)
+        self.emit_progress(100, '✓ 导入完成')
+        self.emit_finished(result)
+
+
 #==== UI 面板 ====
 
 class BackupPanel(QWidget):
@@ -147,6 +180,11 @@ class BackupPanel(QWidget):
         self.btn_import.clicked.connect(self.on_import)
         self.btn_template = QPushButton('下载导入模板', objectName='secondary')
         self.btn_template.clicked.connect(self.on_download_template)
+        # 阶段五互通：与微信小程序本地数据互导
+        self.btn_mp_export = QPushButton('导出小程序数据(JSON)', objectName='tertiary')
+        self.btn_mp_export.clicked.connect(self.on_miniprogram_export)
+        self.btn_mp_import = QPushButton('导入小程序数据(JSON)', objectName='tertiary')
+        self.btn_mp_import.clicked.connect(self.on_miniprogram_import)
         # 入口按钮：打开自动备份配置页（回调由 DataCenterWindow 提供）
         self.btn_auto_backup = QPushButton('自动备份设置', objectName='tertiary')
         if self._on_auto_backup_clicked:
@@ -160,6 +198,8 @@ class BackupPanel(QWidget):
         ops_grid.addWidget(self.btn_import, 1, 0)
         ops_grid.addWidget(self.btn_template, 1, 1)
         ops_grid.addWidget(self.btn_auto_backup, 1, 2)
+        ops_grid.addWidget(self.btn_mp_export, 2, 0)
+        ops_grid.addWidget(self.btn_mp_import, 2, 1)
         for c in range(3):
             ops_grid.setColumnStretch(c, 1)
         ol.addLayout(ops_grid)
@@ -274,7 +314,8 @@ class BackupPanel(QWidget):
         """切换任务运行状态：禁用/启用按钮 + 显示/隐藏进度条。"""
         self._running = running
         for btn in (self.btn_backup, self.btn_restore,
-                    self.btn_export, self.btn_import, self.btn_template):
+                    self.btn_export, self.btn_import, self.btn_template,
+                    self.btn_mp_export, self.btn_mp_import):
             btn.setEnabled(not running)
         self.progress_bar.setVisible(running)
         if running:
@@ -476,3 +517,60 @@ class BackupPanel(QWidget):
         except Exception as e:
             self._log(f'✗ 模板生成失败：{e}')
             dialog.error(self, '生成失败', str(e))
+
+    def _current_mode(self) -> str:
+        """当前数据模式（shangmen/club），取不到时回退 shangmen。"""
+        try:
+            from data_center.mode_config import get_current_mode
+            return str(get_current_mode() or 'shangmen')
+        except Exception:
+            return 'shangmen'
+
+    def on_miniprogram_export(self):
+        """导出小程序备份 JSON（后台线程）。"""
+        if self._running:
+            return
+        dir_path = self._dir_getter()
+        if not dir_path or not os.path.isdir(dir_path):
+            dialog.warn(self, '提示', '请先选择有效的档案目录')
+            return
+        mode = self._current_mode()
+        default_name = f'backup_{mode}_{datetime.now().strftime("%Y-%m-%d")}.json'
+        path, _ = QFileDialog.getSaveFileName(
+            self, '导出小程序数据', default_name, 'JSON文件 (*.json)')
+        if not path:
+            return
+
+        worker = MiniprogramExportWorker(dir_path, mode, path)
+
+        def on_finished(result):
+            dialog.info(
+                self, '导出成功',
+                f'已导出 {result["students"]} 位学员到：\n{result["path"]}\n\n'
+                f'文件发送到手机微信后，在小程序「我的 → 数据 → 导入备份」中选择即可导入。')
+
+        self._connect_worker(worker, on_finished, '导出小程序数据')
+
+    def on_miniprogram_import(self):
+        """导入小程序备份 JSON（后台线程）。"""
+        if self._running:
+            return
+        dir_path = self._dir_getter()
+        if not dir_path or not os.path.isdir(dir_path):
+            dialog.warn(self, '提示', '请先选择有效的档案目录')
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, '选择小程序备份 JSON', '', 'JSON文件 (*.json)')
+        if not path:
+            return
+
+        worker = MiniprogramImportWorker(path, dir_path)
+
+        def on_finished(result):
+            msg = (f'新建 {result["created"]} 个学员，更新 {result["updated"]} 个，'
+                   f'跳过软删 {result["skipped_deleted"]} 个；'
+                   f'写入剩余课时 {result["lessons_applied"]} 人')
+            self._log(f'  {msg}；跳过表：{", ".join(result["skipped_tables"]) or "无"}')
+            dialog.info(self, '导入成功', msg)
+
+        self._connect_worker(worker, on_finished, '导入小程序数据')

@@ -17,9 +17,15 @@ from data_exporter import export_summary_excel
 from backup.backup_creator import do_backup, do_auto_backup
 from backup.backup_restorer import do_restore
 
+# 小程序桥（阶段五互通）：入口统一走 backup_coordinator
+from data_center.miniprogram_bridge import (
+    import_miniprogram_backup, export_miniprogram_backup,
+)
+
 __all__ = [
     'do_backup', 'do_auto_backup', 'do_restore',
     'do_export_summary', 'import_students_from_excel', 'generate_import_template',
+    'import_miniprogram_backup', 'export_miniprogram_backup',
 ]
 
 
