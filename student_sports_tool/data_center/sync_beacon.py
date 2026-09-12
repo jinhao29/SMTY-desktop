@@ -41,7 +41,8 @@ class SyncBeacon:
 
     def __init__(self, service_port: int, interval: float = DEFAULT_INTERVAL,
                  target_host: str = '255.255.255.255',
-                 token: str = '', pc_name: str = ''):
+                 token: str = '', pc_name: str = '',
+                 pairing_key: str = ''):
         """
         参数:
             service_port: 同步服务端口（写入报文 port 字段，手机端据此填 syncPort）
@@ -50,12 +51,16 @@ class SyncBeacon:
                          测试或单播探测时可指定具体地址）
             token: PC 端同步 token（v23.5 零配置：手机端收到后自动填充）
             pc_name: PC 名称（手机端展示"已连接：XXX"）
+            pairing_key: HMAC 配对码（base64，v1.0.6；非空时报文携带 sig 签名字段，
+                         与 Android SyncPacketAuth.kt 严格对齐。空 = 未配对，
+                         报文不带 sig，手机端按旧协议降级接受）
         """
         self._service_port = int(service_port)
         self._interval = max(1.0, interval)
         self._target = (target_host, UDP_PORT)
         self._token = token or ''
         self._pc_name = pc_name or ''
+        self._pairing_key = pairing_key or ''
         self._stop_event = threading.Event()
         self._thread: threading.Thread = None
 
@@ -75,7 +80,7 @@ class SyncBeacon:
 
     def _run(self):
         local = local_ip()
-        payload = json.dumps({
+        fields = {
             'type': 'desktop_online',
             'host': local,
             'port': self._service_port,
@@ -83,7 +88,14 @@ class SyncBeacon:
             # v23.5 零配置配对：手机端收到后自动填充 syncToken 与展示 PC 名称
             'token': self._token,
             'name': self._pc_name,
-        }).encode('utf-8')
+        }
+        # v1.0.6 心跳 HMAC：已配对时报文携带 sig（与手机端 SyncPacketAuth 对齐）
+        if self._pairing_key:
+            from data_center.pairing_key import canonical_online, sign
+            fields['sig'] = sign(self._pairing_key, canonical_online(
+                local, self._service_port, fields['timestamp'],
+                self._token, self._pc_name))
+        payload = json.dumps(fields).encode('utf-8')
 
         # v23.6.1：广播目标全集 —— 受限广播 + 本机各网卡子网定向广播。
         # 部分路由器（AP 隔离/跨网段策略）会丢弃 255.255.255.255 受限广播，

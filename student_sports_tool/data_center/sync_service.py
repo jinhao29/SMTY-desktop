@@ -130,14 +130,16 @@ class SyncServiceManager:
                 target=self._serve_loop, daemon=True, name='SyncService')
             self._serve_thread.start()
 
-            # 心跳广播（携带 token + PC 名称，手机端零配置填充）
+            # 心跳广播（携带 token + PC 名称，手机端零配置填充；已配对时附 HMAC 签名）
             try:
                 from data_center.sync_beacon import SyncBeacon
+                from data_center.pairing_key import load_pairing_key
                 self._beacon = SyncBeacon(
                     service_port=self.config['port'],
                     interval=BEACON_INTERVAL,
                     token=self.config['token'],
-                    pc_name=self._pc_name())
+                    pc_name=self._pc_name(),
+                    pairing_key=load_pairing_key(archive_dir or ''))
                 self._beacon.start()
             except Exception as e:
                 logging.exception('心跳广播启动失败')

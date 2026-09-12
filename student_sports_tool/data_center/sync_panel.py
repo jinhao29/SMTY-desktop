@@ -104,6 +104,28 @@ class SyncServerPanel(QWidget):
         row2.addStretch()
         cl.addLayout(row2)
 
+        # v1.0.6 心跳 HMAC 配对：生成配对码 → 手机端「桌面同步 → 配对码」粘贴，
+        # 两端一致后心跳报文携带 HMAC 签名，同网段伪造心跳无法劫持上传目标
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel('配对码（心跳防伪造）'))
+        self.le_pairing = QLineEdit()
+        self.le_pairing.setReadOnly(True)
+        self.le_pairing.setPlaceholderText('未配对（心跳不签名，仍可自动发现）')
+        self.le_pairing.setMaximumWidth(340)
+        row3.addWidget(self.le_pairing)
+        self.btn_pair = QPushButton('生成 / 重新配对')
+        self.btn_pair.setObjectName('secondary')
+        self.btn_pair.setFixedWidth(130)
+        self.btn_pair.clicked.connect(self._on_generate_pairing)
+        row3.addWidget(self.btn_pair)
+        self.btn_unpair = QPushButton('清除')
+        self.btn_unpair.setObjectName('secondary')
+        self.btn_unpair.setFixedWidth(70)
+        self.btn_unpair.clicked.connect(self._on_clear_pairing)
+        row3.addWidget(self.btn_unpair)
+        row3.addStretch()
+        cl.addLayout(row3)
+
         self.lbl_hint = QLabel('')
         self.lbl_hint.setStyleSheet('color:#6B6B6B; font-size:12px;')
         self.lbl_hint.setWordWrap(True)
@@ -162,9 +184,11 @@ class SyncServerPanel(QWidget):
     def _load_config(self):
         try:
             from data_center.config_manager import load_config
+            from data_center.pairing_key import load_pairing_key
             cfg = load_config(self._get_dir())
             self.sb_port.setValue(int(cfg.get('sync_port') or DEFAULT_PORT))
             self.le_token.setText(str(cfg.get('sync_token') or ''))
+            self.le_pairing.setText(load_pairing_key(self._get_dir()))
         except Exception:
             pass
         self._refresh_hint()
@@ -217,6 +241,42 @@ class SyncServerPanel(QWidget):
                   token=self.le_token.text().strip(),
                   archive_dir=archive_dir)
         self._refresh_hint()
+
+    # ---------- 配对码（心跳 HMAC） ----------
+
+    def _restart_service_if_running(self):
+        """配对码变更后重启服务，让心跳签名立即生效（幂等：未运行则不动）。"""
+        from data_center.sync_service import get_service
+        svc = get_service()
+        if not svc.is_running():
+            return
+        svc.stop()
+        archive_dir = self._get_dir()
+        svc.add_log_callback(self._on_log)
+        svc.start(port=self.sb_port.value(),
+                  token=self.le_token.text().strip(),
+                  archive_dir=archive_dir)
+
+    def _on_generate_pairing(self):
+        from data_center.pairing_key import generate_pairing_code, save_pairing_key
+        code = generate_pairing_code()
+        if not save_pairing_key(self._get_dir(), code):
+            self._append_log('配对码保存失败（配置文件不可写？）')
+            return
+        self.le_pairing.setText(code)
+        self._restart_service_if_running()
+        self._append_log('已生成新配对码：请复制到手机端「设置 → 桌面同步 → 配对码」完成配对')
+
+    def _on_clear_pairing(self):
+        from data_center.pairing_key import clear_pairing_key
+        clear_pairing_key(self._get_dir())
+        self.le_pairing.clear()
+        self._restart_service_if_running()
+        self._append_log('已清除配对码：心跳恢复无签名（手机端自动降级兼容）')
+
+    def _append_log(self, msg: str):
+        self._on_log('[%s] [同步] %s' % (
+            __import__('time').strftime('%Y-%m-%d %H:%M:%S'), msg))
 
     def _on_log(self, line: str):
         self.log_list.addItem(line)

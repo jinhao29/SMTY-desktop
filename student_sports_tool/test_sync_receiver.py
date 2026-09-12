@@ -229,6 +229,77 @@ def test_beacon_broadcast():
         rx.close()
 
 
+def test_beacon_hmac_signature():
+    """v1.0.6 心跳 HMAC：已配对报文带合法 sig，未配对报文不带 sig。
+
+    锚定向量与 Android :core SyncPacketAuthTest 共用（KEY_B64/CANONICAL/SIG 固定），
+    保证双端规范化串与 HMAC 实现跨端一致；篡改任一字段必须验证失败。
+    """
+    import base64 as b64
+    import hashlib as hl
+    import hmac as hm
+    import socket
+    from data_center.sync_beacon import SyncBeacon
+    from data_center.pairing_key import canonical_online, sign
+
+    # 跨端锚定向量（勿改：Android SyncPacketAuthTest 同步锁定）
+    key_b64 = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
+    canonical = 'desktop_online|192.168.1.100|8765|1726118400000|pair_token|PC'
+    expected_sig = 'vPntvArsTdXF7aN4U7c1mjAfTyaqdV01ywn2lyjSl2Q='
+
+    # 1) 纯函数锚定：sign 与跨端向量一致
+    assert sign(key_b64, canonical) == expected_sig, sign(key_b64, canonical)
+
+    # 2) 规范化串逐字段锚定
+    assert canonical_online('192.168.1.100', 8765, 1726118400000,
+                            'pair_token', 'PC') == canonical
+
+    # 3) 实际广播报文携带可验证 sig（单播环回，Windows 下不依赖全网广播）
+    rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    rx.bind(('127.0.0.1', 9112))
+    rx.settimeout(5)
+    beacon = SyncBeacon(service_port=18765, interval=0.2, target_host='127.0.0.1',
+                        token='pair_token', pc_name='李哥-PC', pairing_key=key_b64)
+    try:
+        beacon.start()
+        data, _ = rx.recvfrom(2048)
+        payload = json.loads(data.decode('utf-8'))
+        sig = payload.pop('sig', None)
+        assert sig, payload  # 已配对：必须带签名
+        canon = canonical_online(payload['host'], payload['port'],
+                                 payload['timestamp'], payload['token'],
+                                 payload['name'])
+        digest = hm.new(b64.b64decode(key_b64), canon.encode('utf-8'),
+                        hl.sha256).digest()
+        assert hm.compare_digest(b64.b64encode(digest).decode('ascii'), sig)
+        # 篡改检测：改掉 host 后原签名必须不再匹配
+        bad = canonical_online('10.0.0.1', payload['port'], payload['timestamp'],
+                               payload['token'], payload['name'])
+        digest_bad = hm.new(b64.b64decode(key_b64), bad.encode('utf-8'), hl.sha256).digest()
+        assert not hm.compare_digest(
+            b64.b64encode(digest_bad).decode('ascii'), sig)
+    finally:
+        beacon.stop()
+        rx.close()
+
+    # 4) 未配对（无 pairing_key）：报文不带 sig（旧协议兼容）
+    rx2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rx2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    rx2.bind(('127.0.0.1', 9112))
+    rx2.settimeout(5)
+    beacon2 = SyncBeacon(service_port=18765, interval=0.2, target_host='127.0.0.1',
+                         token='pair_token', pc_name='李哥-PC')
+    try:
+        beacon2.start()
+        data2, _ = rx2.recvfrom(2048)
+        payload2 = json.loads(data2.decode('utf-8'))
+        assert 'sig' not in payload2, payload2
+    finally:
+        beacon2.stop()
+        rx2.close()
+
+
 def test_device_hello_trust_flow():
     """手机回执设备指纹：登记 → 待信任 → PC 信任后 hello 返回 trusted=True。"""
     import tempfile
