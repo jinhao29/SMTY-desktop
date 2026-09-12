@@ -8,12 +8,13 @@
 """
 import modern_dialog as dialog
 import os
+import sys
 import logging
 from file_lock import file_lock, atomic_save_workbook
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QLabel, QSpinBox,
     QMessageBox, QMenu, QSplitter, QApplication, QDialog, QCheckBox,
     QFileDialog, QFrame, QLineEdit, QAbstractItemView
@@ -24,13 +25,26 @@ import config_manager
 from renewal_processor import CRITICAL, WARNING, NORMAL, UNKNOWN
 from base_components import install_row_actions, refresh_row_actions
 
+# 注入父目录（student_sports_tool/）与 training_tool 设计资产目录
+# （styles/cards 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, os.path.join(_ROOT, 'training_tool'), _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
-# 紧急等级配色（行背景色 + 剩余课时文字色）
+# 新设计语言令牌与组件（灰白简约 · 珊瑚橙强调）
+from cards import Card
+from styles import Palette
+
+
+# 紧急等级配色（行背景色 + 剩余课时文字色；语义色尽量取 Palette 令牌，
+# 琥珀色「提醒」无对应令牌保留字面值）
 URGENCY_COLORS = {
-    CRITICAL: {'bg': '#FFEBEB', 'fg': '#E53E3E', 'label': '紧急'},
+    CRITICAL: {'bg': '#FFEBEB', 'fg': Palette.RED, 'label': '紧急'},
     WARNING: {'bg': '#FFF7E6', 'fg': '#B45309', 'label': '提醒'},
-    NORMAL: {'bg': '#FFFFFF', 'fg': '#1A1A1A', 'label': '正常'},
-    UNKNOWN: {'bg': '#FFFFFF', 'fg': '#9B9B9B', 'label': '未设置'},
+    NORMAL: {'bg': Palette.CARD, 'fg': Palette.TEXT, 'label': '正常'},
+    UNKNOWN: {'bg': Palette.CARD, 'fg': Palette.MUTED, 'label': '未设置'},
 }
 
 
@@ -48,9 +62,9 @@ class RenewalPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
 
         # 阈值配置栏
-        gb_cfg = QGroupBox('预警阈值配置')
-        gb_cfg.setObjectName('card')
-        cl = QHBoxLayout(gb_cfg)
+        gb_cfg = Card('预警阈值配置')
+        cl = QHBoxLayout()
+        cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(12)
         cl.addWidget(QLabel('续费提醒阈值（剩余课时≤）：'))
         self.sp_renewal = QSpinBox()
@@ -87,6 +101,7 @@ class RenewalPanel(QWidget):
         self.btn_advanced.setCheckable(True)
         self.btn_advanced.toggled.connect(self._toggle_advanced_panel)
         cl.addWidget(self.btn_advanced)
+        gb_cfg.set_content_layout(cl)
         lay.addWidget(gb_cfg)
         # 初始化时读取配置填充开关状态（避免触发 toggled 信号）
         self._load_auto_backup_state()
@@ -100,9 +115,9 @@ class RenewalPanel(QWidget):
         splitter.setHandleWidth(8)
 
         # 续费预警表
-        gb_renewal = QGroupBox('续费预警')
-        gb_renewal.setObjectName('card')
-        rl = QVBoxLayout(gb_renewal)
+        gb_renewal = Card('续费预警')
+        rl = QVBoxLayout()
+        rl.setContentsMargins(0, 0, 0, 0)
         self.tbl_renewal = QTableWidget()
         self.tbl_renewal.setColumnCount(7)
         self.tbl_renewal.setHorizontalHeaderLabels(
@@ -119,12 +134,13 @@ class RenewalPanel(QWidget):
             ('复制电话', lambda t, r: self._copy_phone(t.item(r, 0).text())),
         ])
         rl.addWidget(self.tbl_renewal)
+        gb_renewal.set_content_layout(rl)
         splitter.addWidget(gb_renewal)
 
         # 未上课提醒表
-        gb_inactive = QGroupBox('长期未上课提醒')
-        gb_inactive.setObjectName('card')
-        il = QVBoxLayout(gb_inactive)
+        gb_inactive = Card('长期未上课提醒')
+        il = QVBoxLayout()
+        il.setContentsMargins(0, 0, 0, 0)
         self.tbl_inactive = QTableWidget()
         self.tbl_inactive.setColumnCount(6)
         self.tbl_inactive.setHorizontalHeaderLabels(
@@ -138,6 +154,7 @@ class RenewalPanel(QWidget):
             ('复制电话', lambda t, r: self._copy_phone(t.item(r, 0).text())),
         ])
         il.addWidget(self.tbl_inactive)
+        gb_inactive.set_content_layout(il)
         splitter.addWidget(gb_inactive)
 
         splitter.setStretchFactor(0, 3)
@@ -287,11 +304,10 @@ class RenewalPanel(QWidget):
         - 上次自动备份时间（last_auto_backup_at，只读显示）
         - 统一保存按钮（一次保存所有高级配置）
         """
-        self.gb_advanced = QGroupBox('高级配置（直接编辑 _data_center_config.json）')
-        self.gb_advanced.setObjectName('card')
-        al = QVBoxLayout(self.gb_advanced)
+        self.gb_advanced = Card('高级配置（直接编辑 _data_center_config.json）')
+        al = QVBoxLayout()
         al.setSpacing(10)
-        al.setContentsMargins(14, 12, 14, 12)
+        al.setContentsMargins(0, 0, 0, 0)
 
         # 1. 滚动备份数 + 手机同步目录（同一行）
         row1 = QHBoxLayout()
@@ -319,7 +335,7 @@ class RenewalPanel(QWidget):
         row2.setSpacing(10)
         row2.addWidget(QLabel('上次自动备份：'))
         self.lbl_last_backup = QLabel('—')
-        self.lbl_last_backup.setStyleSheet('color:#6b7280; font-style:italic;')
+        self.lbl_last_backup.setStyleSheet(f'color:{Palette.TEXT_SUB}; font-style:italic;')
         row2.addWidget(self.lbl_last_backup, 1)
         self.btn_save_advanced = QPushButton('保存高级配置', objectName='primary')
         self.btn_save_advanced.clicked.connect(self._save_advanced_config)
@@ -328,8 +344,9 @@ class RenewalPanel(QWidget):
 
         # 3. 配置文件路径提示（让教练知道 JSON 在哪）
         self.lbl_config_path = QLabel('配置文件：—')
-        self.lbl_config_path.setStyleSheet('color:#9ca3af; font-size:11px;')
+        self.lbl_config_path.setStyleSheet(f'color:{Palette.MUTED}; font-size:11px;')
         al.addWidget(self.lbl_config_path)
+        self.gb_advanced.set_content_layout(al)
 
         # 默认隐藏
         self.gb_advanced.setVisible(False)
@@ -529,10 +546,10 @@ class MutedListDialog(QDialog):
 
         # 标题与说明
         title = QLabel('免打扰名单（7天免打扰期内学员不显示在预警列表）')
-        title.setStyleSheet('font-size:15px; font-weight:600; color:#007AFF;')
+        title.setStyleSheet(f'font-size:15px; font-weight:600; color:{Palette.ACCENT};')
         lay.addWidget(title)
         hint = QLabel('若误标记了学员，可选中后点击"取消免打扰"恢复预警显示。')
-        hint.setStyleSheet('color:#757575; font-size:13px;')
+        hint.setStyleSheet(f'color:{Palette.TEXT_SUB}; font-size:13px;')
         lay.addWidget(hint)
 
         # 名单表格
@@ -590,13 +607,13 @@ class MutedListDialog(QDialog):
                 item.setTextAlignment(Qt.AlignCenter)
                 # 已过期的行用灰色标识
                 if days_left < 0:
-                    item.setForeground(QColor('#9E9E9E'))
+                    item.setForeground(QColor(Palette.MUTED))
                 # 剩余天数列特殊着色
                 if col == 3:
                     if days_left > 0:
-                        item.setForeground(QColor('#FF3B30'))
+                        item.setForeground(QColor(Palette.RED))
                     elif days_left == 0:
-                        item.setForeground(QColor('#FF9500'))
+                        item.setForeground(QColor(Palette.ACCENT))
                 self.tbl.setItem(i, col, item)
 
     def _on_context_menu(self, pos):

@@ -18,18 +18,23 @@ import logging
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QListWidget, QListWidgetItem, QFrame, QSpinBox,
+    QListWidget, QListWidgetItem, QSpinBox,
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_PARENT = os.path.dirname(_HERE)
-if _PARENT not in sys.path:
-    sys.path.insert(0, _PARENT)
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, os.path.join(_ROOT, 'training_tool'), _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 try:
     import tray_notifier
 except Exception:  # 托盘不可用时静默降级
     tray_notifier = None
+
+# 新设计语言令牌与组件（灰白简约 · 珊瑚橙强调）
+from cards import Card
+from styles import Palette
 
 DEFAULT_PORT = 8765
 
@@ -69,16 +74,15 @@ class SyncServerPanel(QWidget):
         lay.setContentsMargins(16, 14, 16, 14)
         lay.setSpacing(12)
 
-        # 服务控制卡（两行布局：状态/按钮 一行，端口/token 一行，避免拥挤重叠）
-        card = QFrame()
-        card.setObjectName('card')
-        cl = QVBoxLayout(card)
-        cl.setContentsMargins(16, 12, 16, 12)
+        # 服务控制卡（状态/按钮、端口/token、配对码三行，避免拥挤重叠）
+        card = Card('服务控制')
+        cl = QVBoxLayout()
+        cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(10)
 
         row1 = QHBoxLayout()
         self.lbl_status = QLabel('服务未启动')
-        self.lbl_status.setStyleSheet('font-weight:bold; color:#9B9B9B;')
+        self.lbl_status.setStyleSheet(f'font-weight:bold; color:{Palette.MUTED};')
         row1.addWidget(self.lbl_status)
         row1.addStretch()
         self.btn_toggle = QPushButton('启动同步服务')
@@ -127,36 +131,31 @@ class SyncServerPanel(QWidget):
         cl.addLayout(row3)
 
         self.lbl_hint = QLabel('')
-        self.lbl_hint.setStyleSheet('color:#6B6B6B; font-size:12px;')
+        self.lbl_hint.setObjectName('hint')
         self.lbl_hint.setWordWrap(True)
         cl.addWidget(self.lbl_hint)
+        card.set_content_layout(cl)
         lay.addWidget(card)
 
         # 说明卡（固定内容，三行以内，不被列表挤压）
-        guide = QFrame()
-        guide.setObjectName('card')
-        gl = QVBoxLayout(guide)
-        gl.setContentsMargins(16, 10, 16, 10)
-        gl.setSpacing(4)
+        guide = Card()
+        gl = QVBoxLayout()
+        gl.setContentsMargins(0, 0, 0, 0)
         steps = QLabel(
             '① 服务随主程序自动开启：USB 手机插入即连，同一 Wi-Fi 手机端「自动发现 PC」即可；'
             '② 下方信任自己的手机；③ 连不上先运行 desktop_sync/firewall_allow.bat')
-        steps.setStyleSheet('color:#6B6B6B; font-size:12px;')
+        steps.setObjectName('hint')
         steps.setWordWrap(True)
         gl.addWidget(steps)
+        guide.set_content_layout(gl)
         lay.addWidget(guide)
 
         # 发现的设备卡（最小高度保证标题与列表可见）
-        dev_card = QFrame()
-        dev_card.setObjectName('card')
-        dl = QVBoxLayout(dev_card)
-        dl.setContentsMargins(16, 10, 16, 10)
+        dev_card = Card('发现的设备（信任后标记为自己的设备）')
+        dl = QVBoxLayout()
+        dl.setContentsMargins(0, 0, 0, 0)
         dl.setSpacing(6)
-        dev_title = QLabel('发现的设备（信任后标记为自己的设备）')
-        dev_title.setStyleSheet('font-weight:bold; color:#3A3A3A;')
-        dl.addWidget(dev_title)
         self.device_list = QListWidget()
-        self.device_list.setStyleSheet('font-size:12px;')
         self.device_list.setMinimumHeight(110)
         dl.addWidget(self.device_list, 1)
         btn_row = QHBoxLayout()
@@ -170,14 +169,18 @@ class SyncServerPanel(QWidget):
         btn_row.addWidget(self.btn_untrust)
         btn_row.addStretch()
         dl.addLayout(btn_row)
+        dev_card.set_content_layout(dl)
         lay.addWidget(dev_card, 3)
 
-        # 同步日志区
-        lay.addWidget(QLabel('同步日志：'))
+        # 同步日志卡
+        log_card = Card('同步日志')
+        ll = QVBoxLayout()
+        ll.setContentsMargins(0, 0, 0, 0)
         self.log_list = QListWidget()
-        self.log_list.setStyleSheet('font-size:12px; color:#3A3A3A;')
         self.log_list.setMinimumHeight(90)
-        lay.addWidget(self.log_list, 2)
+        ll.addWidget(self.log_list)
+        log_card.set_content_layout(ll)
+        lay.addWidget(log_card, 2)
 
     # ---------- 配置 ----------
 
@@ -210,12 +213,12 @@ class SyncServerPanel(QWidget):
                 f'手机端配置：地址 {_local_ip()}，端口 {self.sb_port.value()}'
                 f'（USB 连接则地址填 127.0.0.1，插入即自动连接）')
             self.lbl_status.setText('服务运行中（随主程序自动启动）')
-            self.lbl_status.setStyleSheet('font-weight:bold; color:#34D399;')
+            self.lbl_status.setStyleSheet(f'font-weight:bold; color:{Palette.GREEN};')
             self.btn_toggle.setText('停止同步服务')
         else:
             self.lbl_hint.setText('主程序启动时会自动开启服务；也可在此手动启动。')
             self.lbl_status.setText('服务未启动')
-            self.lbl_status.setStyleSheet('font-weight:bold; color:#9B9B9B;')
+            self.lbl_status.setStyleSheet(f'font-weight:bold; color:{Palette.MUTED};')
             self.btn_toggle.setText('启动同步服务')
 
     # ---------- 服务启停（全局单例） ----------
