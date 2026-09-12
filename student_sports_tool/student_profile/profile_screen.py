@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""UI 层：学员管理界面（参考管理后台布局语言，浅色珊瑚橙主题）。
+"""UI 层：学员管理界面（灰白简约 · 珊瑚橙强调，卡片式布局）。
 
-布局结构（与教练管理页统一）：
+布局结构（复用 training_tool 设计令牌，#profile_root 作用域 QSS 级联子树）：
 1. 页头：大标题 + 计数徽章 + 副标题
-2. 工具栏：搜索框 | 成长工具 | 刷新 | + 新增学员（主按钮）
-3. 筛选 chips：全部(n) / 正常(n) / 需续费(n) / 课时关注(n) / 已停用(n)
-4. 表格：头像姓名 | 年龄 | 身高 | 体重 | BMI | 体型 | 年级 | 总课时 | 已上 | 剩余 | 状态徽章 | 行内操作
-5. 底部计数栏（显示数量 + 续费预警名单）
+2. 操作卡：搜索框 | 成长工具 | 刷新 | + 新增学员（主按钮）| 筛选 chips
+3. 表格卡：头像姓名 | 年龄 | 身高 | 体重 | BMI | 体型 | 年级 | 总课时 | 已上 | 剩余 | 状态徽章 | 行内操作
+4. 状态卡：显示数量 + 续费预警名单
 
 拆分说明（P2 超大文件拆分）：
 - 对话框 → profile_dialogs.py / profile_lesson_dialog.py
@@ -20,7 +19,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QTableView, QHeaderView, QFrame, QAbstractItemView
+    QPushButton, QTableView, QHeaderView, QAbstractItemView
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -29,15 +28,22 @@ if _HERE not in sys.path:
 _PARENT = os.path.dirname(_HERE)
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
+# training_tool 共享设计资产（styles/cards 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_TRAINING = os.path.join(_PARENT, 'training_tool')
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
 
 import profile_manager as pm
 from student_table_model import StudentTableModel, StudentSortFilterProxyModel
 from profile_handlers import ProfileHandlersMixin
-from base_components import ColorPalette
 from manage_components import (
     PageHeader, FilterChipBar, AvatarNameDelegate, StatusBadgeDelegate,
     RowActionsDelegate,
 )
+
+# 新设计语言令牌与组件（灰白简约 · 珊瑚橙强调）
+from styles import scoped_qss, Spacing
+from cards import Card
 
 
 class ProfileScreen(ProfileHandlersMixin, QWidget):
@@ -65,15 +71,24 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         self._init_ui()
 
     def _init_ui(self):
+        # 作用域 QSS：#profile_root 子树统一灰白卡片风格（复用 training_tool 同一套 QSS）
+        self.setObjectName('profile_root')
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet(scoped_qss('profile_root'))
+
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 20, 24, 16)
-        lay.setSpacing(12)
+        lay.setSpacing(Spacing.CARD)
 
         # 1. 页头：标题 + 计数徽章 + 副标题
         self.header = PageHeader('学员管理', subtitle='管理学员档案、课时与续费状态')
         lay.addWidget(self.header)
 
-        # 2. 工具栏：搜索 | 成长工具 | 刷新 | + 新增学员
+        # 2. 操作卡：搜索 + 成长工具 / 刷新 / + 新增学员 + 筛选 chips
+        card_actions = Card()
+        actions_lay = QVBoxLayout()
+        actions_lay.setContentsMargins(0, 0, 0, 0)
+        actions_lay.setSpacing(Spacing.MD)
         toolbar = QHBoxLayout()
         toolbar.setSpacing(10)
         self.le_search = QLineEdit(placeholderText='搜索姓名或年级...')
@@ -96,9 +111,9 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         self.btn_add.setObjectName('primary')
         self.btn_add.clicked.connect(self.on_add)
         toolbar.addWidget(self.btn_add)
-        lay.addLayout(toolbar)
+        actions_lay.addLayout(toolbar)
 
-        # 3. 筛选 chips（单选互斥，带状态计数）
+        # 筛选 chips（单选互斥，带状态计数）
         self.chip_bar = FilterChipBar()
         self.chip_bar.add_chip('all', '全部')
         self.chip_bar.add_chip('normal', '正常', accent='#10B981')
@@ -106,9 +121,11 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         self.chip_bar.add_chip('yellow', '课时关注', accent='#F59E0B')
         self.chip_bar.add_chip('inactive', '已停用', accent='#9B9B9B')
         self.chip_bar.filterChanged.connect(self._on_filter_changed)
-        lay.addWidget(self.chip_bar)
+        actions_lay.addWidget(self.chip_bar)
+        card_actions.set_content_layout(actions_lay)
+        lay.addWidget(card_actions)
 
-        # 4. 学员表格：QTableView + 模型/代理 + delegates
+        # 3. 表格卡：QTableView + 模型/代理 + delegates（背景/表头交给作用域 QSS）
         self.table = QTableView()
         self.table.setModel(self._proxy_model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -133,13 +150,6 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
         header.setSectionResizeMode(10, QHeaderView.Stretch)           # 状态徽章（随窗口尺寸自适应）
         header.setSectionResizeMode(11, QHeaderView.ResizeToContents)  # 操作
         header.setStretchLastSection(False)
-        # 12 列信息密度高：紧凑字号 + 收窄内边距（对齐参考图表头小字风格），
-        # 保证 1180 初始窗口下 12 列全部可见、无横向滚动
-        self.table.setStyleSheet('''
-            QTableView { font-size: 13px; }
-            QTableView::item { padding: 6px 0px; }
-            QHeaderView::section { padding: 10px 4px; font-size: 12px; }
-        ''')
         self.table.setMinimumHeight(400)
         # 双击行 → 学员详情页（编辑走操作列「编辑」按钮 / 右键菜单）
         self.table.doubleClicked.connect(self._on_open_detail)
@@ -161,28 +171,26 @@ class ProfileScreen(ProfileHandlersMixin, QWidget):
                 ('删除', self._on_action_delete),
             ],
         }, self.table))
-        lay.addWidget(self.table, 1)
+        card_table = Card()
+        table_lay = QVBoxLayout()
+        table_lay.setContentsMargins(0, 0, 0, 0)
+        table_lay.addWidget(self.table)
+        card_table.set_content_layout(table_lay)
+        lay.addWidget(card_table, 1)
 
-        # 5. 底部计数栏：显示数量 + 续费预警名单
-        footer = QFrame()
-        footer.setObjectName('footerBar')
-        footer.setStyleSheet(f'''
-            QFrame#footerBar {{
-                background: {ColorPalette.CARD};
-                border: 1px solid #E5E5E5; border-radius: 12px;
-            }}
-        ''')
-        fl = QHBoxLayout(footer)
-        fl.setContentsMargins(16, 10, 16, 10)
+        # 4. 状态卡：显示数量 + 续费预警名单
+        card_footer = Card()
+        fl = QHBoxLayout()
+        fl.setContentsMargins(0, 0, 0, 0)
         self.lbl_footer = QLabel('共 0 名学员')
-        self.lbl_footer.setStyleSheet('color: #6B6B6B; font-size: 13px; background: transparent; border: none;')
         self.lbl_footer.setTextFormat(Qt.RichText)
         fl.addWidget(self.lbl_footer)
         fl.addStretch()
         self.lbl_hint = QLabel('双击行查看详情 · 编辑走操作列「编辑」')
-        self.lbl_hint.setStyleSheet('color: #9B9B9B; font-size: 12px; background: transparent; border: none;')
+        self.lbl_hint.setObjectName('hint')
         fl.addWidget(self.lbl_hint)
-        lay.addWidget(footer)
+        card_footer.set_content_layout(fl)
+        lay.addWidget(card_footer)
 
     #==== 数据刷新 ====
 
