@@ -16,6 +16,7 @@ import logging
 
 from excel_builder import append_record, read_student_meta
 import lesson_manager as lm
+from standards import SCORE_TYPES
 
 
 #==== 预设常量 ====
@@ -41,6 +42,13 @@ TYPE_OPTIONS = [
     ('小学4年级', 'primary', 4, '4年级', None),
     ('小学5年级', 'primary', 5, '5年级', None),
     ('小学6年级', 'primary', 6, '6年级', None),
+    # 初中/高中体测：与 Android Standards.kt JUNIOR_DATA / SENIOR_DATA 对齐
+    ('初中体测(初一)', 'junior', 7, '初一', None),
+    ('初中体测(初二)', 'junior', 8, '初二', None),
+    ('初中体测(初三)', 'junior', 9, '初三', None),
+    ('高中体测(高一)', 'senior', 10, '高一', None),
+    ('高中体测(高二)', 'senior', 11, '高二', None),
+    ('高中体测(高三)', 'senior', 12, '高三', None),
     ('中考(2026新方案)', 'zhongkao', None, '中考2026', '2026新方案'),
     ('中考(2025旧方案)', 'zhongkao_old', None, '中考2025', '2025旧方案'),
     ('体态矫正评估', 'posture', None, '体态评估', None),
@@ -132,7 +140,7 @@ def build_student_payload(name, age, gender, school, phone, date_str,
         'table_type': ttype, 'grade': grade, 'sheet_tag': sheet_tag,
         'zk_plan': zk_plan or '', 'evaluation': evaluation,
     }
-    if ttype in ('primary', 'zhongkao', 'zhongkao_old'):
+    if ttype in SCORE_TYPES:
         student['records'] = records or {}
     else:
         student['blocks'] = blocks or []

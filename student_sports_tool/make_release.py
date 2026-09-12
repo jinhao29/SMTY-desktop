@@ -105,6 +105,17 @@ def main():
     # 确认包内带上了 VERSION（运行时版本号来源）
     if not os.path.exists(os.path.join(DIST_APP, 'VERSION')):
         fail('dist/app/VERSION 复制失败，zip 将缺少版本真源')
+    # 合规文件同样显式复制：《用户协议》《隐私政策》必须随安装包交付，
+    # 不能依赖打包器行为（缺了等于合规文件没有送达客户）
+    legal_src = os.path.join(HERE, 'legal')
+    if not os.path.isdir(legal_src):
+        fail('legal/ 目录不存在（《用户协议》《隐私政策》缺失，不允许发版）')
+    legal_dst = os.path.join(DIST_APP, 'legal')
+    shutil.copytree(legal_src, legal_dst, dirs_exist_ok=True)
+    missing = [f for f in ('user_agreement.txt', 'privacy_policy.txt')
+               if not os.path.exists(os.path.join(legal_dst, f))]
+    if missing:
+        fail(f'合规文件复制失败，zip 将缺少：{", ".join(missing)}')
     zip_path = make_zip(zip_name_for(version))
     digest = make_sha256(zip_path)
     size_mb = os.path.getsize(zip_path) / 1048576

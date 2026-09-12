@@ -216,6 +216,7 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
     # 延迟导入，避免循环依赖与无 Android 数据时的加载开销
     import excel_builder
     import lesson_manager
+    from standards import archive_type_for_grade
 
     # v5 优化4：构建冲突解决索引 {原名: resolution}
     resolution_map = {}
@@ -328,6 +329,11 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
 
         # 若学员档案不存在，则创建空档案（带基本信息）
         if not os.path.exists(file_path):
+            # 按手机端年级还原学段（小学/初中/高中/中考），此前硬编码 primary+None
+            # 导致初高中与中考学员在 PC 端被当作小学生
+            _ttype, _grade, _tag = archive_type_for_grade(stu.get('grade'))
+            if action == 'rename':
+                _tag = _tag + '（重命名）'
             student_data = {
                 'name': effective_name,
                 'age': stu.get('age'),
@@ -343,9 +349,9 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 # 毫秒级更新时间（LWW 判新，往返保真）
                 'updated_at': stu.get('updated_at'),
                 'date': datetime.now().strftime('%Y-%m-%d'),
-                'table_type': 'primary',
-                'grade': None,
-                'sheet_tag': 'Android导入' + ('（重命名）' if action == 'rename' else ''),
+                'table_type': _ttype,
+                'grade': _grade,
+                'sheet_tag': _tag,
                 'zk_plan': '',
                 'evaluation': '',
                 'records': {},

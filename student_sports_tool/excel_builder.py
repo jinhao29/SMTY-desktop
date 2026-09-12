@@ -12,7 +12,8 @@ import os
 import json
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
-from standards import get_primary_standards, get_zhongkao_standards
+from standards import (get_primary_standards, get_zhongkao_standards,
+                       get_standards_by_grade, grade_label, SCORE_TYPES)
 from scorer import format_value, calc_total
 from summary_builder import build_summary_sheet
 from file_lock import file_lock, with_retry, atomic_save_workbook
@@ -28,8 +29,8 @@ TITLE_FONT = Font(bold=True, size=12, color='FFFFFF', name='微软雅黑')
 HEADER_FONT = Font(bold=True, name='微软雅黑')
 NAME_FONT = Font(bold=True, size=14, name='微软雅黑')
 
-# 成绩型档案类型（参与汇总对比）
-SCORE_TYPES = ('primary', 'zhongkao', 'zhongkao_old')
+# 成绩型档案类型（参与汇总对比）——定义在 standards.py，全仓单一真源
+# （在此重新导出，保持既有 `from excel_builder import SCORE_TYPES` 调用方可用）
 
 
 def _safe_merge(ws, ranges):
@@ -107,12 +108,16 @@ def _should_hide_grade(student):
         return False
 
 
-def _build_primary_sheet(ws, student):
-    """生成小学体测档案（含第N次标识）。"""
+def _build_grade_sheet(ws, student, grade_text):
+    """生成学段体测档案（小学/初中/高中通用，含第N次标识）。
+
+    参数:
+        grade_text: 学段年级显示文案，如 '小学3年级' / '初一' / '高一'
+    """
     grade = student['grade']
     seq = student.get('seq', 1)
     date = student.get('date', '')
-    stds = get_primary_standards(grade)
+    stds = get_standards_by_grade(grade)
     records = student.get('records', {})
     hide_grade = _should_hide_grade(student)
 
@@ -125,7 +130,7 @@ def _build_primary_sheet(ws, student):
     if hide_grade:
         title_text = f"{student['name']}  第{seq}次体测档案  {date}"
     else:
-        title_text = f"{student['name']}  第{seq}次体测档案（小学{grade}年级）  {date}"
+        title_text = f"{student['name']}  第{seq}次体测档案（{grade_text}）  {date}"
     ws.cell(row=r, column=1, value=title_text)
     _safe_merge(ws, [(r, 1, r, 10)])
     _style_block(ws, r, 1, r, 10, fill=TITLE_FILL, font=TITLE_FONT, align=LEFT)
@@ -136,7 +141,7 @@ def _build_primary_sheet(ws, student):
         age_val = student.get('age')
         grade_pair = ('年龄', f"{age_val}岁" if age_val else '')
     else:
-        grade_pair = ('年级', f'小学{grade}年级')
+        grade_pair = ('年级', grade_text)
     info_pairs = [
         ('姓名', student['name'], '性别', student['gender']),
         ('学校', student.get('school', ''), grade_pair[0], grade_pair[1]),
@@ -318,8 +323,11 @@ def _build_record_sheet(wb, student, seq):
     ws = wb.create_sheet(title=sheet_name)
     student_with_seq = {**student, 'seq': seq}
     ttype = student['table_type']
-    if ttype == 'primary':
-        _build_primary_sheet(ws, student_with_seq)
+    if ttype in ('primary', 'junior', 'senior'):
+        # 学段年级文案：小学「小学X年级」，初中/高中「初一」~「高三」（standards.grade_label）
+        grade = student.get('grade')
+        grade_text = f'小学{grade}年级' if ttype == 'primary' else grade_label(grade)
+        _build_grade_sheet(ws, student_with_seq, grade_text)
     elif ttype == 'zhongkao':
         _build_zhongkao_sheet(ws, student_with_seq)
     elif ttype in ('posture', 'weight'):

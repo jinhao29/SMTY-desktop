@@ -13,7 +13,9 @@ import logging
 
 import lesson_manager as lm
 from config_manager import load_config
-from renewal_processor import filter_active_alerts
+from renewal_processor import (
+    filter_active_alerts, DEFAULT_RENEWAL_THRESHOLD, DEFAULT_INACTIVE_DAYS,
+)
 from followup_manager import load_followup, mark_contacted, clear_followup
 
 
@@ -36,8 +38,9 @@ def get_renewal_alerts(dir_path):
     - 索引数据结构与 lesson_manager.get_summary 输出兼容
     """
     cfg = load_config(dir_path)
-    threshold = cfg.get('renewal_threshold', 5)
-    inactive_threshold = cfg.get('inactive_days', 14)
+    # 默认值取自 renewal_processor 的跨端对齐常量（教练可在「高级配置」覆盖）
+    threshold = cfg.get('renewal_threshold', DEFAULT_RENEWAL_THRESHOLD)
+    inactive_threshold = cfg.get('inactive_days', DEFAULT_INACTIVE_DAYS)
 
     # === 终极架构：优先走 SQLite 索引 ===
     students = _fetch_students_summary_fast(dir_path)

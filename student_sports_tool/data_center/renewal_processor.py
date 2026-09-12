@@ -16,19 +16,38 @@ NORMAL = 'normal'       # 正常
 UNKNOWN = 'unknown'     # 未设置总课时
 
 
-def calc_urgency(remaining, total, threshold=5):
+# ---------------------------------------------------------------------------
+# 续费预警阈值（⚠️ 单一真源）
+#
+# 与 Android 端 data/model/RenewalThresholds.kt 的常量一一对应，由
+# test_renewal_thresholds_parity.py 跨端锚定。改任一端必须同步另一端。
+# ---------------------------------------------------------------------------
+
+# 剩余课时 <= 此值视为「即将用完 / 需要续费提醒」
+# ⚠️ 建议值 3：与 Android 现网行为一致（PC 原默认 5，提示偏早）。
+#    教练仍可在「续费预警 → 高级配置」中按机构习惯覆盖此默认值。
+DEFAULT_RENEWAL_THRESHOLD = 3
+
+# 剩余课时 <= 此值视为「紧急」
+CRITICAL_REMAINING = 2
+
+# 连续未上课天数 >= 此值视为「长期未上课」（PC 独有维度，Android 暂未实现同类预警）
+DEFAULT_INACTIVE_DAYS = 14
+
+
+def calc_urgency(remaining, total, threshold=DEFAULT_RENEWAL_THRESHOLD):
     """计算学员续费紧急等级。
 
     参数:
         remaining: 剩余课时
         total: 总课时
-        threshold: 提醒阈值
+        threshold: 提醒阈值（默认取 DEFAULT_RENEWAL_THRESHOLD）
 
     返回: 'critical' | 'warning' | 'normal' | 'unknown'
     """
     if total <= 0:
         return UNKNOWN
-    if remaining <= 2 or remaining < 0:
+    if remaining <= CRITICAL_REMAINING or remaining < 0:
         return CRITICAL
     if remaining <= threshold:
         return WARNING
@@ -52,14 +71,16 @@ def calc_inactive_days(last_date_str):
         return -1
 
 
-def is_inactive(inactive_days, threshold=14):
+def is_inactive(inactive_days, threshold=DEFAULT_INACTIVE_DAYS):
     """判断是否长期未上课。"""
     if inactive_days < 0:
         return False
     return inactive_days >= threshold
 
 
-def filter_active_alerts(students, followup_status, threshold=5, inactive_threshold=14):
+def filter_active_alerts(students, followup_status,
+                         threshold=DEFAULT_RENEWAL_THRESHOLD,
+                         inactive_threshold=DEFAULT_INACTIVE_DAYS):
     """过滤出需要展示的预警学员。
 
     参数:

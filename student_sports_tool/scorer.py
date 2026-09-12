@@ -16,6 +16,10 @@ def parse_value(raw: str, unit: str) -> float:
     支持格式：
     - 秒/次/米/cm/ml: 直接数字，如 '13.8'、'592'
     - 分秒: '4'05"'/'4:05'/'245' → 秒数
+
+    ⚠️ 负数成绩显式拒绝（与 Android Scorer.kt v50 语义对齐）：
+    负值在 direction=LESS 的项目里会走 `val <= full` 分支直接拿 100 分，
+    是评分系统的静默错误，必须在解析层拦截。
     """
     if raw is None:
         raise ValueError('成绩为空')
@@ -24,8 +28,15 @@ def parse_value(raw: str, unit: str) -> float:
         raise ValueError('成绩为空')
     # 分秒格式：含 ' : 或 " 的，解析为秒
     if unit == '分秒':
-        return _parse_time(s)
-    return float(s)
+        val = _parse_time(s)
+    else:
+        try:
+            val = float(s)
+        except (TypeError, ValueError):
+            raise ValueError('格式错误')
+    if val < 0:
+        raise ValueError('成绩不能为负数')
+    return val
 
 
 def _parse_time(s: str) -> float:

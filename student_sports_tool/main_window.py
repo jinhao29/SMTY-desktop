@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
     QMessageBox, QFileDialog, QDateEdit, QFrame, QScrollArea, QSizePolicy
 )
 
-from standards import get_primary_standards, get_zhongkao_standards
+from standards import (get_primary_standards, get_zhongkao_standards,
+                       get_standards_by_grade, SCORE_TYPES)
 from scorer import calc_score, format_value
 from ui_components import (
     ColorPalette, FontHelper, FormSheet, StatCard, IconBox
@@ -236,13 +237,18 @@ class MainWindow(QMainWindow):
         self.table.clear()
         self.table.setRowCount(0)
         self.table.blockSignals(True)
-        if ttype in ('primary', 'zhongkao', 'zhongkao_old'):
+        if ttype in SCORE_TYPES:
             self.table.setColumnCount(7)
             self.table.setHorizontalHeaderLabels(
                 ['测试项目', '单位', '满分标准', '及格标准', '实测成绩', '得分', '等级']
             )
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            stds = get_primary_standards(grade) if ttype == 'primary' else get_zhongkao_standards()
+            if ttype == 'primary':
+                stds = get_primary_standards(grade)
+            elif ttype in ('junior', 'senior'):
+                stds = get_standards_by_grade(grade)
+            else:
+                stds = get_zhongkao_standards()
             self._cur_stds = stds
             self._fill_score_rows(stds, ttype, zk)
         elif ttype in ('posture', 'weight'):
@@ -450,7 +456,7 @@ class MainWindow(QMainWindow):
         except ValueError:
             age = None
         # 收集数据
-        if ttype in ('primary', 'zhongkao', 'zhongkao_old'):
+        if ttype in SCORE_TYPES:
             records = ac.collect_records_from_table(self.table)
             blocks = None
         else:
