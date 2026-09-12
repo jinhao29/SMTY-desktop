@@ -35,7 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE) if os.path.basename(HERE) in ('Py', 'py') else HERE
 
 # 期望基线（passed 数）；用于快速判断是否引入回归
-EXPECTED_TOTAL = 204
+EXPECTED_TOTAL = 213
 
 
 def discover_tests() -> list:

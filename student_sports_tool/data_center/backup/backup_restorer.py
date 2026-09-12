@@ -14,10 +14,31 @@ import android_backup_parser as abp
 from backup.backup_creator import do_auto_backup
 
 
+def ensure_backup_mode(zip_path, target_dir):
+    """防串库校验（v23.13）：Android 备份的 mode 必须与目标目录模式一致。
+
+    - 仅对带 export_meta.json 的备份校验：纯 PC 备份（无该条目）是当前目录
+      体系自己的数据，不校验
+    - 旧版备份无 mode 标记 → mode_guard 按 default_mode 宽容处理
+      （俱乐部功能 v23.12 才引入，无标记备份必属上门体育）
+    - 归一化后不一致 → 抛 ValueError（BaseWorker/上层统一捕获上报给用户）
+
+    此前只有局域网同步路径有校验，手动恢复路径缺失 —— 俱乐部备份可以直接
+    恢复进上门体育目录，学员数据直接串库。
+    """
+    from mode_guard import backup_mode_raw, check_backup_mode
+    if backup_mode_raw(zip_path) is None:
+        return
+    ok, reason = check_backup_mode(zip_path, target_dir)
+    if not ok:
+        raise ValueError(f'{reason}。请切换到对应工作模式的数据目录后再恢复。')
+
+
 def do_restore(zip_path, target_dir, progress_cb=None, conflict_resolutions=None):
     """执行恢复：从 zip 还原档案目录。
 
     恢复流程：
+    0. 防串库校验：备份 mode（如有）经 aliases 归一化后必须与目标目录模式一致
     1. 自动备份当前数据（防误覆盖）
     2. 时光机快照：备份 meta_index.db 到 _db_snapshots/（v5 优化6 新增）
     3. 还原 .xlsx 学员档案
@@ -35,6 +56,8 @@ def do_restore(zip_path, target_dir, progress_cb=None, conflict_resolutions=None
     """
     zip_path = os.path.normpath(zip_path)
     target_dir = os.path.normpath(target_dir)
+    # === v23.13 防串库校验 ===（在任何数据被触碰之前）
+    ensure_backup_mode(zip_path, target_dir)
     if progress_cb:
         progress_cb('正在检测当前档案...')
     # 自动备份当前数据

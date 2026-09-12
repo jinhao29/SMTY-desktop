@@ -30,6 +30,29 @@ def dir_mode(archive_dir: str) -> str:
     return mode_for_archive_dir(archive_dir) or default_mode()
 
 
+def backup_mode_raw(zip_path: str):
+    """读取备份包 meta.mode 的**原始值**；无法判定时返回 None。
+
+    返回 None 的两种情况（调用方语义不同，需区分）：
+    - zip 里没有 export_meta.json → **纯 PC 备份**（PC 自身备份不含该条目），
+      属于当前目录体系的数据，防串库校验应跳过
+    - 有条目但没有 mode 字段 → 旧版备份（俱乐部功能 v23.12 才引入，
+      无标记备份必属上门体育），按 default_mode 宽容处理
+
+    坏 zip 仍向上抛异常（与 backup_mode 一致，不能把坏包误判成默认模式）。
+    """
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        if 'export_meta.json' not in zf.namelist():
+            return None
+        data = zf.read('export_meta.json').decode('utf-8', errors='replace')
+        try:
+            meta = json.loads(data)
+        except json.JSONDecodeError:
+            return None
+        raw = str((meta.get('meta') or {}).get('mode') or '').strip()
+        return raw or None
+
+
 def backup_mode(zip_path: str) -> str:
     """备份 zip 的工作模式 id。旧值经 aliases 解析，无法解析按 default_mode。
 

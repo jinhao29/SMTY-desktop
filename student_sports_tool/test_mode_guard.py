@@ -10,9 +10,13 @@ import sys
 import tempfile
 import zipfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_center'))
 
+from android_backup_parser import parse_backup_mode
+from backup.backup_restorer import ensure_backup_mode
 from data_center.mode_guard import backup_mode, check_backup_mode, dir_mode
 
 
@@ -63,6 +67,64 @@ def test_check_mismatch_rejected():
     p = _make_backup('club')
     ok, reason = check_backup_mode(p, r'C:/x/学员档案')
     assert not ok and '俱乐部' in reason and '上门体育' in reason
+
+
+# ---------------------------------------------------------------------------
+# v23.13 备份防串库：手动恢复路径的 mode 校验（ensure_backup_mode）
+# + 解析层 mode 入口（parse_backup_mode）
+# ---------------------------------------------------------------------------
+
+def _make_zip(entries: dict) -> str:
+    fd, path = tempfile.mkstemp(suffix='.zip')
+    os.close(fd)
+    with zipfile.ZipFile(path, 'w') as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    return path
+
+
+def _meta_zip(mode):
+    return _make_zip({'export_meta.json': json.dumps(
+        {'meta': {'version': '1.0', 'mode': mode}})})
+
+
+def test_ensure_backup_mode_rejects_cross_mode(tmp_path):
+    """俱乐部备份恢复进上门体育目录 → 明确报错（防串库）。"""
+    coaching_dir = tmp_path / '学员档案'
+    coaching_dir.mkdir()
+    with pytest.raises(ValueError):
+        ensure_backup_mode(_meta_zip('club'), str(coaching_dir))
+
+
+def test_ensure_backup_mode_allows_legacy_value_in_club_dir(tmp_path):
+    """旧值 mode=club 的备份恢复到俱乐部目录 → 归一化后放行（旧备份兼容）。"""
+    club_dir = tmp_path / '学员档案俱乐部'
+    club_dir.mkdir()
+    ensure_backup_mode(_meta_zip('club'), str(club_dir))          # 不抛即通过
+    ensure_backup_mode(_meta_zip('club_evolve'), str(club_dir))   # 新值同样放行
+
+
+def test_ensure_backup_mode_allows_coaching_backup_in_coaching_dir(tmp_path):
+    coaching_dir = tmp_path / '学员档案'
+    coaching_dir.mkdir()
+    ensure_backup_mode(_meta_zip('coaching'), str(coaching_dir))  # 不抛即通过
+
+
+def test_ensure_backup_mode_skips_pure_pc_backup(tmp_path):
+    """纯 PC 备份 zip（无 export_meta.json）不参与 mode 校验 —— 俱乐部目录
+    恢复 PC 自己做的备份不能被误拒。"""
+    zip_path = _make_zip({'学员张三.xlsx': b'fake'})
+    club_dir = tmp_path / '学员档案俱乐部'
+    club_dir.mkdir()
+    ensure_backup_mode(zip_path, str(club_dir))                   # 不抛即通过
+
+
+def test_parse_backup_mode_resolves_legacy_values(tmp_path):
+    """解析层 mode 入口：历史值归一化；无标记返回 None。"""
+    assert parse_backup_mode(_meta_zip('club')) == 'club_evolve'
+    assert parse_backup_mode(_meta_zip('club_evolve')) == 'club_evolve'
+    assert parse_backup_mode(_meta_zip('coaching')) == 'coaching'
+    assert parse_backup_mode(_make_zip({'data.txt': 'x'})) is None
 
 
 if __name__ == '__main__':

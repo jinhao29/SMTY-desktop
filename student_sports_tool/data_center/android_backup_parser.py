@@ -16,6 +16,7 @@ import json
 import logging
 import shutil
 import sqlite3
+import zipfile
 from typing import Any, Dict, List, Optional
 
 _logger = logging.getLogger(__name__)
@@ -264,6 +265,27 @@ def parse_meta_json(json_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]
             if item.get(name_key):
                 result[key].append(item)
     return result
+
+
+def parse_backup_mode(zip_path: str) -> Optional[str]:
+    """解析层的 mode 入口：读取备份包 meta.mode 并归一化为当前配置的模式 id。
+
+    - zip 无 export_meta.json（纯 PC 备份）或旧版备份无 mode 标记 → 返回 None
+    - 历史值经 aliases 归一化（club → club_evolve）
+    - 读取失败（坏 zip 等）→ 返回 None（模式校验宁缺勿错）
+
+    真正的防串库判定走 mode_guard.check_backup_mode（backup_restorer.ensure_backup_mode
+    与 sync_server 均调用它）；本函数供解析/展示层与跨端测试使用，
+    保持"解析 mode 统一走解析层"。
+    """
+    from mode_guard import backup_mode_raw, resolve_alias
+    try:
+        raw = backup_mode_raw(zip_path)
+    except (OSError, zipfile.BadZipFile):
+        return None
+    if not raw:
+        return None
+    return resolve_alias(raw) or None
 
 
 def parse_android_backup(zip_path: str, extract_dir: str,
