@@ -10,6 +10,7 @@
 """
 import os
 import json
+import logging
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from standards import (get_primary_standards, get_zhongkao_standards,
@@ -76,6 +77,10 @@ def _read_meta(wb):
         meta.setdefault('records', [])
         return meta
     except Exception:
+        # 必须上报：meta 损坏被静默吞掉会让记录编号从 1 重来，
+        # 后续追加可能生成重复表名或丢历史；此处不打断业务（保持既有降级行为），
+        # 但必须留下完整堆栈供排障（用户可见提示由调用方 append_record 的异常路径承担）
+        logging.exception('学员档案 _meta 元数据解析失败（文件可能损坏），本次按空档案降级')
         return {'info': {}, 'records': []}
 
 
