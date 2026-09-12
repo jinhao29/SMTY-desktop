@@ -23,14 +23,21 @@ from PySide6.QtWidgets import (
 _PARENT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
+# training_tool 共享设计资产（styles/cards 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_TRAINING = os.path.join(_PARENT, 'training_tool')
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
 
 from backup_panel import BackupPanel
 from report_panel import ReportPanel
 from renewal_panel import RenewalPanel
 from schedule_achievement_panel import ScheduleAchievementPanel
 from sync_panel import SyncServerPanel
-from base_components import ColorPalette, StatCell
+from base_components import StatCell
 from manage_components import AnimatedTabBar
+
+# 新设计语言令牌与作用域 QSS（灰白简约 · 珊瑚橙强调）
+from styles import scoped_qss, Palette
 
 DEFAULT_DIR = os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案')
 
@@ -149,16 +156,19 @@ class DataCenterWindow(QWidget):
         self._init_lan_moment_listener()
 
     def _init_ui(self):
+        # 作用域 QSS：#datacenter_root 子树统一灰白卡片风格（复用 training_tool 同一套 QSS，
+        # 按钮 primary/secondary/danger 角色、输入框、表格、列表、滚动条全部接管）
+        self.setObjectName('datacenter_root')
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet(scoped_qss('datacenter_root'))
+
         lay = QVBoxLayout(self)
         lay.setSpacing(22)
         lay.setContentsMargins(20, 20, 20, 20)
 
-        # 标题（22px/800，与全应用 PageHeader 层级统一）
+        # 标题（22px/700，与全应用 PageHeader 层级统一；样式由作用域 QSS 的 pageTitle 接管）
         title = QLabel('数据中心')
-        title.setStyleSheet(
-            f'color: {ColorPalette.TEXT}; font-size: 22px; font-weight: 800;'
-            'background: transparent;'
-        )
+        title.setObjectName('pageTitle')
         lay.addWidget(title)
 
         # === 数据中心概览条（真数据：自动备份状态 / 上次备份 / 本次会话备份次数 / 档案文件数）===
@@ -166,8 +176,8 @@ class DataCenterWindow(QWidget):
         dc_strip.setObjectName('statStrip')
         dc_strip.setStyleSheet(f'''
             QFrame#statStrip {{
-                background: {ColorPalette.CARD};
-                border: 1px solid #E5E5E5;
+                background: {Palette.CARD};
+                border: 1px solid {Palette.DIVIDER};
                 border-radius: 16px;
             }}
         ''')
@@ -222,24 +232,24 @@ class DataCenterWindow(QWidget):
         self.tabs.setTabBar(AnimatedTabBar(self.tabs))
         self.tabs.setTabPosition(QTabWidget.North)
         self.tabs.setDocumentMode(False)
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; background: #FFFFFF; }
-            QTabBar {
+        self.tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; background: {Palette.BG}; }}
+            QTabBar {{
                 qproperty-drawBase: 0;
-                background: #FFFFFF;
-            }
-            QTabBar::tab {
-                background: #FFFFFF;
-                color: #6B6B6B;
+                background: {Palette.BG};
+            }}
+            QTabBar::tab {{
+                background: {Palette.BG};
+                color: {Palette.TEXT_SUB};
                 padding: 10px 24px;
                 font-size: 14px;
                 font-weight: 600;
                 border: none;
                 border-bottom: 2px solid transparent;
                 margin-right: 4px;
-            }
-            QTabBar::tab:hover { color: #FF6B47; }
-            QTabBar::tab:selected { color: #FF6B47; border-bottom: 2px solid transparent; }
+            }}
+            QTabBar::tab:hover {{ color: {Palette.ACCENT}; }}
+            QTabBar::tab:selected {{ color: {Palette.ACCENT}; border-bottom: 2px solid transparent; }}
         """)
 
         self.panel_backup = BackupPanel(self._get_dir, on_auto_backup_clicked=self._open_auto_backup_panel)

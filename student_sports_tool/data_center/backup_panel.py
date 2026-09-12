@@ -15,16 +15,28 @@ M4-S2 改造：
 import modern_dialog as dialog
 import logging
 import os
+import sys
 from datetime import datetime
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton,
     QTextEdit, QFileDialog, QMessageBox, QLabel, QLineEdit, QProgressBar
 )
 from PySide6.QtGui import QFont
 
+# 注入父目录（student_sports_tool/）与 training_tool 设计资产目录
+# （styles/cards 为包内 path-insert 式顶层模块，app.py 启动时同样插入）
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, os.path.join(_ROOT, 'training_tool'), _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import backup_coordinator as bc
 from worker_pool import BaseWorker, run_worker
+# 新设计语言令牌与组件（灰白简约 · 珊瑚橙强调）
+from styles import Spacing
+from cards import Card
 
 
 #==== 后台 Worker 子类（每个耗时操作一个）====
@@ -151,22 +163,23 @@ class BackupPanel(QWidget):
 
     def _init_ui(self):
         lay = QVBoxLayout(self)
-        lay.setSpacing(22)
+        lay.setSpacing(Spacing.CARD)
         lay.setContentsMargins(0, 0, 0, 0)
 
-        # 档案目录显示
-        gb_dir = QGroupBox('当前档案目录')
-        gb_dir.setObjectName('card')
-        dl = QHBoxLayout(gb_dir)
+        # 档案目录显示卡
+        card_dir = Card('当前档案目录')
+        dl = QHBoxLayout()
+        dl.setContentsMargins(0, 0, 0, 0)
         self.lbl_dir = QLabel('（未选择）')
         self.lbl_dir.setStyleSheet('color:#9B9B9B;')
         dl.addWidget(self.lbl_dir)
-        lay.addWidget(gb_dir)
+        card_dir.set_content_layout(dl)
+        lay.addWidget(card_dir)
 
-        # 操作按钮区（3列网格，整齐排列）
-        gb_ops = QGroupBox('数据操作')
-        gb_ops.setObjectName('card')
-        ol = QVBoxLayout(gb_ops)
+        # 操作按钮卡（3列网格，整齐排列）
+        card_ops = Card('数据操作')
+        ol = QVBoxLayout()
+        ol.setContentsMargins(0, 0, 0, 0)
         ol.setSpacing(14)
         ops_grid = QGridLayout()
         ops_grid.setSpacing(14)
@@ -207,12 +220,13 @@ class BackupPanel(QWidget):
         for c in range(3):
             ops_grid.setColumnStretch(c, 1)
         ol.addLayout(ops_grid)
-        lay.addWidget(gb_ops)
+        card_ops.set_content_layout(ol)
+        lay.addWidget(card_ops)
 
-        # 备份加密口令（v1.0.3）：解密从手机传入的加密备份
-        gb_pwd = QGroupBox('备份加密口令')
-        gb_pwd.setObjectName('card')
-        pl = QVBoxLayout(gb_pwd)
+        # 备份加密口令卡（v1.0.3）：解密从手机传入的加密备份
+        card_pwd = Card('备份加密口令')
+        pl = QVBoxLayout()
+        pl.setContentsMargins(0, 0, 0, 0)
         pl.setSpacing(8)
         lbl_pwd_hint = QLabel(
             '手机端「设置 → 数据管理 → 备份加密口令」设置了口令后，'
@@ -239,7 +253,8 @@ class BackupPanel(QWidget):
         self.btn_pwd_toggle.toggled.connect(self._toggle_passphrase_echo)
         pwd_row.addWidget(self.btn_pwd_toggle)
         pl.addLayout(pwd_row)
-        lay.addWidget(gb_pwd)
+        card_pwd.set_content_layout(pl)
+        lay.addWidget(card_pwd)
 
         # 进度条（M4-S2 新增）
         self.progress_bar = QProgressBar()
@@ -249,16 +264,17 @@ class BackupPanel(QWidget):
         self.progress_bar.setTextVisible(True)
         lay.addWidget(self.progress_bar)
 
-        # 进度日志（固定高度 150px，内部滚动，不再弹性拉伸）
-        gb_log = QGroupBox('操作日志')
-        gb_log.setObjectName('card')
-        ll = QVBoxLayout(gb_log)
+        # 操作日志卡（固定高度 150px，内部滚动，不再弹性拉伸）
+        card_log = Card('操作日志')
+        ll = QVBoxLayout()
+        ll.setContentsMargins(0, 0, 0, 0)
         self.te_log = QTextEdit()
         self.te_log.setReadOnly(True)
         self.te_log.setFixedHeight(150)
         self.te_log.setPlaceholderText('操作日志将显示在这里...')
         ll.addWidget(self.te_log)
-        lay.addWidget(gb_log)
+        card_log.set_content_layout(ll)
+        lay.addWidget(card_log)
         lay.addStretch()
 
     def refresh(self):
