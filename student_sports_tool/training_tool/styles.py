@@ -310,3 +310,14 @@ TRAINING_QSS = f"""
 #training_root QMenu::item {{ padding: 8px 24px; border-radius: 6px; color: {Palette.TEXT}; }}
 #training_root QMenu::item:selected {{ background: {Palette.ACCENT_LIGHT}; color: {Palette.ACCENT}; }}
 """
+
+
+def scoped_qss(root_name: str = 'training_root') -> str:
+    """把同一套灰白卡片 QSS 重新作用域到任意根 objectName。
+
+    供 training_tool 之外的模块（学员档案 / 数据中心）复用同一设计语言：
+    页面根容器 setObjectName('profile_root') 后调用
+    ``setStyleSheet(scoped_qss('profile_root'))``，选择器逐个替换、零遗漏
+    （含下拉箭头 image:url 规则）。默认参数返回原 TRAINING_QSS 等价结果。
+    """
+    return TRAINING_QSS.replace('#training_root', '#' + root_name)
