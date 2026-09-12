@@ -15,6 +15,7 @@
 - 扩展列对齐 Android 端 Student 实体（性别/学校/电话/遗传与生活习惯字段），
   旧 8 列文件首次写入时自动追加表头，读取按表头名匹配、向后兼容
 """
+import logging
 import os
 import json
 import sys
@@ -505,6 +506,9 @@ def read_body_metrics(dir_path: str, name: str) -> list:
             result.sort(key=lambda x: x['date'])
             return result
     except Exception:
+        # 读路径兜底（第二批）：损坏/被锁的档案不能让页面崩溃，但必须留痕
+        # —— 否则"体型历史怎么空了"无从排查。降级行为不变。
+        logging.exception('读取体型历史失败（档案文件可能损坏或被占用）：{}'.format(name))
         return []
 
 
@@ -521,6 +525,8 @@ def get_student_extra(dir_path: str, name: str, key: str, default=None):
             stu_meta = _read_meta(wb).get('students', {}).get(name, {})
             return stu_meta.get(key, default)
     except Exception:
+        # 读路径兜底（第二批）：同上，降级返回默认值但留下排查线索
+        logging.exception('读取学员扩展元数据失败（{} / {}）'.format(name, key))
         return default
 
 
