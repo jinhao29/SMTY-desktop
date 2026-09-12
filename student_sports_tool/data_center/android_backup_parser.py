@@ -76,6 +76,23 @@ def _connect_db(db_path: str) -> sqlite3.Connection:
     return sqlite3.connect(uri, uri=True)
 
 
+def is_sqlcipher_db(db_path: str) -> bool:
+    """判断文件是否为 SQLCipher 加密库（v1.0.5 起 Android 端加密）。
+
+    SQLCipher 加密后文件头是随机盐，**不是** 明文 SQLite 的 "SQLite format 3\\x00"。
+    标准库 sqlite3 打不开加密库，会抛 DatabaseError("file is not a database")，
+    必须提前识别并给出可读提示，而不是让上层误报"数据库损坏"。
+    """
+    try:
+        with open(db_path, 'rb') as f:
+            header = f.read(16)
+    except OSError:
+        return False
+    if len(header) < 16:
+        return False
+    return header[:15] != b'SQLite format 3'
+
+
 def _list_tables(conn: sqlite3.Connection) -> List[str]:
     """返回数据库中所有用户表名。"""
     cur = conn.execute(
@@ -340,6 +357,14 @@ def parse_android_backup(zip_path: str, extract_dir: str,
 
     # 回退到 .db 解析
     if db_path and os.path.exists(db_path):
+        # v1.0.5：Android 端数据库已由 SQLCipher 加密，PC 标准库 sqlite3 无法打开。
+        # 该情况下 export_meta.json 是唯一通道（Android 端默认会生成），
+        # 明确记录原因而不是让 sqlite3 抛出 "file is not a database" 被误读为数据损坏。
+        if is_sqlcipher_db(db_path):
+            logging.getLogger(__name__).warning(
+                '备份内数据库为 SQLCipher 加密格式，PC 端无法直接解析；'
+                '请确保备份包含 export_meta.json（Android 端默认生成）')
+            return result
         try:
             return parse_db(db_path)
         except sqlite3.DatabaseError:

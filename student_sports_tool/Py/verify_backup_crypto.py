@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_center.android_backup_parser import (  # noqa: E402
     _BACKUP_MAGIC, _GCM_IV_LEN, _DEFAULT_ITERATIONS,
     _derive_backup_key, _decrypt_payload, is_encrypted_payload,
+    is_sqlcipher_db,
 )
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
@@ -84,6 +85,29 @@ def main() -> int:
     expected_len = 4 + 12 + len(plain) + 16
     check('载荷长度符合格式约定', len(payload) == expected_len,
           f'{len(payload)} vs {expected_len}')
+
+    # 8. SQLCipher 库识别（v1.0.5：Android 端数据库文件级加密）
+    # PC 端标准库 sqlite3 打不开加密库，必须能提前识别并给出可读提示，
+    # 否则 sqlite3 抛 "file is not a database" 会被上层误报为"备份损坏"。
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        plain_db = os.path.join(td, 'plain.db')
+        with open(plain_db, 'wb') as f:
+            f.write(b'SQLite format 3\x00' + b'\x00' * 96)
+        check('明文SQLite头 判定为非加密库', not is_sqlcipher_db(plain_db))
+
+        enc_db = os.path.join(td, 'enc.db')
+        with open(enc_db, 'wb') as f:
+            f.write(bytes((i * 7 + 3) & 0xFF for i in range(96)))
+        check('随机盐头 判定为SQLCipher加密库', is_sqlcipher_db(enc_db))
+
+        tiny_db = os.path.join(td, 'tiny.db')
+        with open(tiny_db, 'wb') as f:
+            f.write(b'\x01\x02\x03')
+        check('过短文件 不误判为加密库', not is_sqlcipher_db(tiny_db))
+
+        check('不存在的文件 不误判为加密库',
+              not is_sqlcipher_db(os.path.join(td, 'nope.db')))
 
     print('-' * 62)
     if failures:
