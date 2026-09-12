@@ -7,8 +7,7 @@
 3. 目录与库名解析：各模式档案目录正确
 4. 校验：重复 id / db_name / archive_dir 被拒，default_mode 失配被拒
 5. 当前模式读写与旧值兼容
-6. 过渡开关 use_config=0 时退回旧硬编码行为
-7. ★ 新增机构零代码：只加一段配置即可被正确解析
+6. ★ 新增机构零代码：只加一段配置即可被正确解析
 """
 import json
 import os
@@ -48,7 +47,6 @@ SAMPLE_MODES = [
 def _isolate_env(monkeypatch):
     """每个用例都在干净环境下跑：无环境变量覆盖 + 清空缓存。"""
     monkeypatch.delenv(mc.ENV_CONFIG_PATH, raising=False)
-    monkeypatch.delenv(mc.ENV_USE_CONFIG, raising=False)
     mc.reload()
     yield
     mc.reload()
@@ -239,36 +237,6 @@ def test_current_mode_missing_file(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 6. 过渡开关：use_config=0 退回旧硬编码行为
-# ---------------------------------------------------------------------------
-
-def test_use_config_off_uses_legacy_modes(monkeypatch):
-    monkeypatch.setenv(mc.ENV_USE_CONFIG, '0')
-    mc.reload()
-    assert mc.use_config() is False
-    assert [m['id'] for m in mc.get_all_modes()] == ['coaching', 'club']
-    # legacy 下不做别名映射（旧逻辑原样）
-    assert mc.resolve_alias('club') == 'club'
-    assert mc.archive_dir_for('club').endswith('学员档案俱乐部')
-    assert mc.get_current_mode() in ('coaching', 'club')
-
-
-def test_use_config_env_beats_file(monkeypatch, tmp_path):
-    _use(monkeypatch, _write_config(tmp_path, {
-        'version': 1, 'use_config': True, 'modes': SAMPLE_MODES}))
-    monkeypatch.setenv(mc.ENV_USE_CONFIG, '0')
-    mc.reload()
-    assert mc.use_config() is False
-
-
-def test_file_switch_disables_config(monkeypatch, tmp_path):
-    _use(monkeypatch, _write_config(tmp_path, {
-        'version': 1, 'use_config': False, 'modes': SAMPLE_MODES}))
-    assert mc.use_config() is False
-    assert [m['id'] for m in mc.get_all_modes()] == ['coaching', 'club']
-
-
-# ---------------------------------------------------------------------------
 # 7. ★ 新增机构零代码（阶段一核心目标）
 # ---------------------------------------------------------------------------
 
@@ -325,12 +293,3 @@ def test_spec_interface_names_available(monkeypatch):
     assert mc.get_mode('不存在的模式') is None
     assert [m['id'] for m in mc.get_all_modes()] == ['coaching', 'club_evolve']
     assert mc.resolve_alias('club') == 'club_evolve'
-
-
-def test_use_config_flag_exposed(monkeypatch):
-    """use_config 开关必须可查询（阶段一要求保留一个版本）。"""
-    _use(monkeypatch, SHIPPED_CONFIG)
-    assert mc.use_config() is True
-    monkeypatch.setenv(mc.ENV_USE_CONFIG, 'false')
-    mc.reload()
-    assert mc.use_config() is False

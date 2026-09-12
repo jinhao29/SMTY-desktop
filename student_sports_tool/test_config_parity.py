@@ -41,11 +41,15 @@ def configs():
 
 
 def test_meta_fields_match(configs):
-    """version / default_mode / use_config 双端一致。"""
+    """version / default_mode 双端一致。"""
     pc, kt = configs
-    for key in ('version', 'default_mode', 'use_config'):
+    for key in ('version', 'default_mode'):
         assert pc[key] == kt[key], (
             f'配置字段「{key}」双端不一致：PC={pc.get(key)!r} Android={kt.get(key)!r}')
+
+    # D5（阶段七收口）：use_config 过渡开关已移除，双端文件均不得再带该字段
+    for name, cfg in (('PC', pc), ('Android', kt)):
+        assert 'use_config' not in cfg, f'{name} modes.json 仍残留 use_config 字段'
 
 
 def test_mode_count_and_order_match(configs):

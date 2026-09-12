@@ -8,7 +8,6 @@
 
     version       int    配置版本
     default_mode  str    默认模式 id（解析失败时的兜底）
-    use_config    bool   过渡开关；False 时整体退回旧硬编码逻辑（保留一个版本）
     modes[]       每项：
         id            str    稳定标识，人工命名（coaching / club_evolve）
         display_name  str    显示名
@@ -35,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 CONFIG_REL_PATH = os.path.join('config', 'modes.json')
 ENV_CONFIG_PATH = 'SMTY_MODES_CONFIG'
-ENV_USE_CONFIG = 'SMTY_USE_MODES_CONFIG'
 
 APP_MODE_FILE = os.path.join(os.path.expanduser('~'), '.shangmentiyu', 'app_mode.json')
 
@@ -83,38 +81,6 @@ BUILTIN_MODES = [
 ]
 
 BUILTIN_DEFAULT_MODE = 'coaching'
-
-# 旧硬编码行为（use_config=False 时使用；保留一个版本，稳定后随开关一起移除）
-LEGACY_MODES = [
-    {
-        'id': 'coaching',
-        'display_name': '上门体育',
-        'db_name': 'sports_coach_db',
-        'archive_dir': '学员档案',
-        'enabled': True,
-        'aliases': {},
-        'window_title': '上门体育教学管理平台',
-        'nav_title': '上门体育',
-        'tagline': '学员档案 · 课时排课 · 财务记账 · 数据中心',
-        'badge': '常用',
-        'accent': '#10B981',
-        'icon': 'stopwatch',
-    },
-    {
-        'id': 'club',
-        'display_name': '俱乐部',
-        'db_name': 'sports_coach_club_db',
-        'archive_dir': '学员档案俱乐部',
-        'enabled': True,
-        'aliases': {},
-        'window_title': '俱乐部管理平台',
-        'nav_title': '俱乐部',
-        'tagline': 'EVOLVE 进化体育 · 独立数据空间，与上门体育完全隔离',
-        'badge': 'NEW',
-        'accent': '#047857',
-        'icon': 'bolt',
-    },
-]
 
 _cache = None
 
@@ -172,11 +138,10 @@ def _normalize_mode(m):
     return out
 
 
-def _make_config(modes, default_mode, version, use_config_flag):
+def _make_config(modes, default_mode, version):
     return {
         'version': version,
         'default_mode': default_mode,
-        'use_config': use_config_flag,
         'modes': [_normalize_mode(m) for m in modes],
     }
 
@@ -224,37 +189,16 @@ def reload():
     _cache = None
 
 
-def use_config() -> bool:
-    """过渡开关：环境变量优先，其次配置文件字段，默认 True。
-
-    保留一个版本以便出问题时用 ``SMTY_USE_MODES_CONFIG=0`` 一键退回旧硬编码逻辑。
-    """
-    env = os.environ.get(ENV_USE_CONFIG, '').strip().lower()
-    if env in ('0', 'false', 'no', 'off'):
-        return False
-    if env in ('1', 'true', 'yes', 'on'):
-        return True
-    raw, _ = _read_raw()
-    if isinstance(raw, dict) and 'use_config' in raw:
-        return bool(raw['use_config'])
-    return True
-
-
 def load() -> dict:
     """生效配置（含规范化 modes）。缺失/损坏 → 内置默认；重复项 → 抛异常。"""
     global _cache
     if _cache is not None:
         return _cache
 
-    if not use_config():
-        logger.info('mode_config：use_config 关闭，走旧硬编码逻辑')
-        _cache = _make_config(LEGACY_MODES, 'coaching', 0, False)
-        return _cache
-
     raw, reason = _read_raw()
     if raw is None:
         logger.warning('mode_config：%s —— 已回退内置默认配置', reason)
-        _cache = _make_config(BUILTIN_MODES, BUILTIN_DEFAULT_MODE, 1, True)
+        _cache = _make_config(BUILTIN_MODES, BUILTIN_DEFAULT_MODE, 1)
         return _cache
 
     validate(raw)   # 结构合法但重复/缺失 → 让启动失败，避免带着错配置跑
@@ -263,7 +207,7 @@ def load() -> dict:
         version = int(raw.get('version') or 1)
     except (TypeError, ValueError):
         version = 1
-    _cache = _make_config(raw['modes'], default_mode, version, True)
+    _cache = _make_config(raw['modes'], default_mode, version)
     return _cache
 
 

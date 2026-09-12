@@ -1,7 +1,6 @@
 {
   "version": 1,
   "default_mode": "coaching",
-  "use_config": true,
   "modes": [
     {
       "id": "coaching",
