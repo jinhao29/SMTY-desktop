@@ -78,6 +78,8 @@ code_review_*.md
 # 桌面端运行时同步备份
 .sync_backups/
 student_sports_tool/.sync_backups/
+# 同步通道 TLS 自签证书（docs/sync_tls_design.md）
+.sync/
 # 凭据修复前的临时备份（不可入库）
 miniprogram/server/_backup_before_cred_fix/
 # 小程序运行时数据与虚拟环境

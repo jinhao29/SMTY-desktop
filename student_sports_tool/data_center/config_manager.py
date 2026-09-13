@@ -40,6 +40,9 @@ DEFAULTS = {
     # 手机端设置了「备份加密口令」后，备份包内的数据库会 AES-GCM 加密；
     # 桌面端需填入同一口令才能恢复。留空表示备份未加密（旧格式）。
     'backup_passphrase': '',
+    # === v27 同步通道 TLS（docs/sync_tls_design.md）===
+    # 开启后同步服务同端口启用 HTTPS（自签证书），手机端 TOFU 信任指纹
+    'sync_https': False,
 }
 
 

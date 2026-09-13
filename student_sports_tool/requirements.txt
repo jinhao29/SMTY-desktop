@@ -22,5 +22,9 @@ requests==2.33.1
 portalocker>=2.7.0
 # 跨进程文件互斥锁（file_lock.py）
 
+cryptography>=42.0
+# 同步通道 TLS 自签证书生成（data_center/tls_cert.py，docs/sync_tls_design.md）
+# 仅证书生成用；指纹计算走标准库 hashlib/ssl
+
 # ===== 标准库（无需 pip 安装）=====
 # os / sys / json / zipfile / shutil / datetime / importlib / tempfile / math / sqlite3 / threading

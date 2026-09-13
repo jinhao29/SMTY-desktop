@@ -18,7 +18,7 @@ import logging
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QListWidget, QListWidgetItem, QSpinBox,
+    QListWidget, QListWidgetItem, QSpinBox, QCheckBox,
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -130,6 +130,18 @@ class SyncServerPanel(QWidget):
         row3.addStretch()
         cl.addLayout(row3)
 
+        # v27 TLS 加密传输开关（docs/sync_tls_design.md）：同端口 HTTPS，
+        # 手机端 TOFU 首连固定指纹；切换后自动重启服务生效
+        row4 = QHBoxLayout()
+        self.cb_https = QCheckBox('HTTPS 加密传输（TLS，防内网窃听）')
+        self.cb_https.toggled.connect(self._on_https_toggled)
+        row4.addWidget(self.cb_https)
+        self.lbl_fp = QLabel('')
+        self.lbl_fp.setObjectName('hint')
+        row4.addWidget(self.lbl_fp)
+        row4.addStretch()
+        cl.addLayout(row4)
+
         self.lbl_hint = QLabel('')
         self.lbl_hint.setObjectName('hint')
         self.lbl_hint.setWordWrap(True)
@@ -192,9 +204,40 @@ class SyncServerPanel(QWidget):
             self.sb_port.setValue(int(cfg.get('sync_port') or DEFAULT_PORT))
             self.le_token.setText(str(cfg.get('sync_token') or ''))
             self.le_pairing.setText(load_pairing_key(self._get_dir()))
+            # TLS 开关挂起信号：载入时只设状态，不触发重启
+            self.cb_https.blockSignals(True)
+            self.cb_https.setChecked(bool(cfg.get('sync_https')))
+            self.cb_https.blockSignals(False)
+            self._refresh_fingerprint()
         except Exception:
             pass
         self._refresh_hint()
+
+    def _refresh_fingerprint(self):
+        """展示本机证书指纹前 8 位（供与手机端「桌面同步」页人工核对）。"""
+        from data_center.tls_cert import FINGERPRINT_DISPLAY_LEN
+        fp = ''
+        if self.cb_https.isChecked() and self._get_dir():
+            try:
+                from data_center.tls_cert import ensure_cert, cert_fingerprint
+                cert_path, _ = ensure_cert(self._get_dir())
+                fp = cert_fingerprint(cert_path)
+            except Exception as e:
+                self.lbl_fp.setText(f'证书生成失败：{e}')
+                return
+        self.lbl_fp.setText(
+            f'指纹 {fp[:FINGERPRINT_DISPLAY_LEN]}…（与手机端核对）' if fp else '')
+
+    def _on_https_toggled(self, checked: bool):
+        try:
+            from data_center.config_manager import update_config
+            update_config(self._get_dir(), sync_https=checked)
+            self._refresh_fingerprint()
+            self._append_log('HTTPS 已%s：服务重启后生效（手机端首次连接自动信任指纹）'
+                             % ('开启' if checked else '关闭'))
+            self._restart_service_if_running()
+        except Exception:
+            logging.exception('保存 HTTPS 开关失败')
 
     def _save_config(self):
         try:

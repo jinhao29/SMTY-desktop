@@ -111,6 +111,20 @@ class SyncServiceManager:
                 'archive_dir': archive_dir or '',
                 'save_dir': save_dir or os.path.join(archive_dir or '.', '.sync_backups'),
             }
+            # v27 TLS：sync_https 配置开启且已配置档案目录时，同端口启用 HTTPS
+            # （自签证书 + 手机端 TOFU 指纹，见 docs/sync_tls_design.md）
+            tls_context = None
+            if self.config['archive_dir'] and self._https_enabled(self.config['archive_dir']):
+                try:
+                    from data_center.tls_cert import build_ssl_context, cert_fingerprint
+                    tls_context = build_ssl_context(self.config['archive_dir'])
+                    fp = cert_fingerprint(os.path.join(
+                        self.config['archive_dir'], '.sync', 'tls_cert.pem'))
+                    self._log('HTTPS 已开启（TLS 自签证书，指纹前 8 位 %s）'
+                              % fp[:8])
+                except Exception as e:
+                    tls_context = None
+                    self._log('HTTPS 证书准备失败，回退明文 HTTP：%s' % e)
             try:
                 self._server = create_server(
                     host='0.0.0.0', port=self.config['port'],
@@ -119,7 +133,8 @@ class SyncServiceManager:
                     archive_dir=self.config['archive_dir'],
                     log_cb=self._log,
                     pc_name=self._pc_name(),
-                    status_cb=self._emit_status)
+                    status_cb=self._emit_status,
+                    tls_context=tls_context)
             except OSError as e:
                 # 端口被占用等启动失败：不抛出，由调用方提示
                 self._log('服务启动失败：%s' % e)
@@ -175,6 +190,15 @@ class SyncServiceManager:
             self._log('服务已停止')
 
     # ---------- 内部 ----------
+    @staticmethod
+    def _https_enabled(archive_dir: str) -> bool:
+        """读档案目录配置 sync_https（默认 False）。配置读失败视为关闭。"""
+        try:
+            from data_center.config_manager import load_config
+            return bool(load_config(archive_dir).get('sync_https'))
+        except Exception:
+            return False
+
     def _serve_loop(self):
         try:
             self._server.serve_forever()

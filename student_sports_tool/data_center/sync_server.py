@@ -581,10 +581,31 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
         pass
 
 
+class _TLSThreadingHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer + 可选 TLS（每连接 wrap，见 docs/sync_tls_design.md §3）。
+
+    握手在 accept 线程进行：握手失败抛 SSLError（OSError 子类），
+    BaseServer._handle_request_noblock 会吞掉并继续服务，不影响整体可用。
+    ponytail: 恶意客户端可在 accept 线程拖慢握手（LAN 工具可接受），
+    升级路径：handshake_timeout + 把首读移入工作线程。
+    """
+
+    def __init__(self, *args, tls_context=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tls_context = tls_context
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        if self.tls_context is not None:
+            sock = self.tls_context.wrap_socket(sock, server_side=True)
+        return sock, addr
+
+
 def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
                   save_dir: str = DEFAULT_SAVE_DIR, token: str = '',
                   archive_dir: str = '', log_cb=None,
-                  pc_name: str = '', status_cb=None) -> ThreadingHTTPServer:
+                  pc_name: str = '', status_cb=None,
+                  tls_context=None) -> ThreadingHTTPServer:
     """创建同步服务实例（serve_forever 由调用方驱动）。
 
     参数:
@@ -592,6 +613,7 @@ def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
         log_cb: 日志回调（内嵌 UI 传信号发射器；控制台传 None 走 print）
         pc_name: PC 名称（手机端 hello 响应展示）
         status_cb: v23.11 同步结果回调 (kind, message)，如 ('merge_ok', '已合并 9 个档案')
+        tls_context: 非 None 时同端口启用 HTTPS（自签证书，见 tls_cert.py）
     """
     # P1 修复：禁止空 token 放行。
     # 原实现 token='' 时 _check_token 直接 return True，同网段任何设备都能
@@ -608,7 +630,8 @@ def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
     SyncRequestHandler.log_cb = log_cb
     SyncRequestHandler.status_cb = status_cb
     os.makedirs(SyncRequestHandler.save_dir, exist_ok=True)
-    return ThreadingHTTPServer((host, port), SyncRequestHandler)
+    return _TLSThreadingHTTPServer((host, port), SyncRequestHandler,
+                                   tls_context=tls_context)
 
 
 def main():
