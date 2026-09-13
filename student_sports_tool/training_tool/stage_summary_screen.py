@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""UI 层：阶段总结子页（灰白简约 · 蓝紫强调，对齐图2）。
+"""UI 层：阶段总结子页（灰白卡片 · 珊瑚橙强调，全局统一设计语言）。
 
 功能流程：
   选择学员 + 时间段 → 点击「生成阶段总结」→ 展示课时/反馈/成绩数据 → 导出 Word
 
 界面布局：
   ┌─ 左侧主区域 ─────────────┬─ 右侧辅助区 ───────┐
-  │ 查询条件卡片              │ 蓝紫渐变概览卡片    │
+  │ 查询条件卡片              │ 灰白概览卡片        │
   │ 阶段概述卡片              │ 数据概览 2x2       │
   │ 成绩进步对比表            │ 导出操作卡片        │
   │ 阶段内课后反馈表          │                    │
@@ -23,7 +23,7 @@ import modern_dialog as dialog
 import os
 from datetime import datetime
 from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QLinearGradient
+from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QPen
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QDateEdit, QTableWidget, QTableWidgetItem, QHeaderView,
@@ -37,33 +37,35 @@ from styles import Palette, Type, Spacing, Shadow, Radius
 from cards import Card
 # StatCard / IconBox / BarChartWidget 接受 color 参数，传入新令牌色即可统一
 from ui_components import StatCard, IconBox, BarChartWidget, GradientHeroCard
-from base_components import Shapes, Shadows, _fade_color, paint_card_base, FormSheet
+from base_components import Shapes, FormSheet
 
 
 class HeroCard(GradientHeroCard):
-    """蓝紫渐变重点卡片（覆盖 GradientHeroCard 的珊瑚橙渐变）。
+    """灰白概览卡片（继承 GradientHeroCard 仅取 _title/_value/_subtitle 与 update 接口）。
 
-    复用 GradientHeroCard 的 _title/_value/_subtitle 属性与 update() 接口，
-    仅替换 paintEvent 的渐变色为蓝紫强调，与训练编排主界面统一。
+    v27 统一灰白卡片：不再绘制渐变，白底 + 1px 描边，绘制模式与 cards.Card 一致。
     """
 
     def paintEvent(self, event):
         painter = QPainter(self)
         radius = Shapes.CARD_RADIUS
         rect = self.rect()  # v25 去阴影：无留白，卡片铺满 widget
-        # 蓝紫渐变：强调色 → 深强调
-        grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        grad.setColorAt(0, QColor(Palette.ACCENT))
-        grad.setColorAt(1, QColor(Palette.ACCENT_PRESSED))
-        paint_card_base(painter, rect, radius, 0, fill=QBrush(grad))
+        # 白底 + 1px 描边（cards.Card 同款）
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(QColor(Palette.CARD)))
+        painter.drawRoundedRect(rect, radius, radius)
+        painter.setPen(QPen(QColor(Palette.DIVIDER), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), radius, radius)
         # 文字
-        painter.setPen(QColor('#FFFFFF'))
+        painter.setPen(QColor(Palette.TEXT_SUB))
         painter.setFont(Type.caption())
         painter.drawText(rect.adjusted(20, 20, -20, 0), Qt.AlignTop | Qt.AlignLeft, self._title)
+        painter.setPen(QColor(Palette.TEXT))
         painter.setFont(Type.hero())
         painter.drawText(rect.adjusted(20, 44, -20, -20), Qt.AlignLeft | Qt.AlignVCenter, str(self._value))
         if self._subtitle:
-            painter.setPen(QColor(255, 255, 255, 200))
+            painter.setPen(QColor(Palette.MUTED))
             painter.setFont(Type.caption())
             painter.drawText(rect.adjusted(20, 0, -20, -20), Qt.AlignBottom | Qt.AlignLeft, self._subtitle)
         painter.end()
