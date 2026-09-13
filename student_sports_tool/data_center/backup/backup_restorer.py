@@ -284,6 +284,8 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
     students = parsed.get('students', [])
     lessons = parsed.get('lessons', [])
     packages = parsed.get('packages', [])
+    # 批 2：手机端现场收款流水（自然键去重后写入 PC 收费记录）
+    fees = parsed.get('fees', [])
 
     # 按学员名聚合课时明细
     lessons_by_name = {}
@@ -443,7 +445,11 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
                 # v23.9.2：手机课时包付费 → PC 收费记录镜像（收费数据互通）
                 # 幂等键：备注「手机端课时包：{包名}」——同包重复推送不放大；
                 # 教练在 PC 手工补录的同笔收费需自行核对（备注无标记，会各自成行）
-                phone_pkgs = pkg_rows.get(name) or []
+                # 批 2（操作摩擦修复）：备份内含手机收费流水时以流水为准
+                # （见函数末尾 _import_phone_fees），不再用「课时包累计 paidAmount →
+                # 单条收费」的旧镜像 —— 两者并存会把同一笔钱算两次
+                # （旧镜像写的是累计值，新链路写的是逐笔）。
+                phone_pkgs = [] if fees else (pkg_rows.get(name) or [])
                 if phone_pkgs:
                     try:
                         import fee_manager
@@ -476,7 +482,103 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
             except (FileNotFoundError, PermissionError) as e:
                 logging.error(f'同步课时包失败 [{effective_name}]：目录={target_dir}，原因={e}', exc_info=True)
 
+    # 批 2：手机端收费流水入账
+    # 自然键去重；重复跳过会计数上报（不静默丢弃、不静默覆盖）
+    if fees:
+        _import_phone_fees(target_dir, fees, resolution_map, progress_cb)
+
     return new_count
+
+
+def _fee_key(name, date, amount, hours, method, note):
+    """收费记录的自然键（与 Android FeeRecord.stableKey 的输入一一对应）。
+
+    金额/课时数统一格式化为两位小数字符串：桌面端从 Excel 读回的是 float，
+    直接比 float 会因浮点表示差异把同一条收费判成两条。
+    """
+    return (
+        str(name or ''),
+        str(date or ''),
+        f'{float(amount or 0):.2f}',
+        f'{float(hours or 0):.2f}',
+        str(method or ''),
+        str(note or ''),
+    )
+
+
+def _existing_fee_keys(target_dir: str) -> set:
+    """收集 PC 端已有收费记录的自然键（学员, 日期, 金额, 课时数, 收款方式, 备注）。
+
+    读取失败静默返回空集合——退化为不去重，但不阻塞恢复主流程。
+    """
+    keys = set()
+    try:
+        import fee_manager as _fm
+        for rec in _fm.get_payments(target_dir):
+            keys.add(_fee_key(rec.get('name'), rec.get('date'), rec.get('amount'),
+                              rec.get('hours'), rec.get('method'), rec.get('note')))
+    except Exception:
+        logging.exception('收集已有收费幂等键失败（退化为不去重）')
+    return keys
+
+
+def _import_phone_fees(target_dir, fees, resolution_map=None, progress_cb=None):
+    """把手机端收费流水写入 PC 收费记录。
+
+    合并规则（批 2 拍板）：自然键 =（学员, 日期, 金额, 课时数, 收款方式, 备注），
+    与 Android 侧 FeeRecord.stableKey 的输入一致 —— 同一条收费无论重复推送多少次
+    都只入账一次；键冲突一律**跳过并计数**，既不覆盖 PC 已有记录，也不静默丢弃。
+
+    返回 (新增笔数, 跳过笔数)。
+    """
+    import fee_manager
+
+    existing = _existing_fee_keys(target_dir)
+    added = 0
+    skipped = 0
+
+    for f in fees:
+        name = (f.get('student_name') or '').strip()
+        if not name:
+            continue
+        # 与学员档案同样的冲突策略（跳过/重命名），保持两端命名一致
+        resolution = (resolution_map or {}).get(name)
+        if resolution and resolution.get('action') == 'skip':
+            skipped += 1
+            continue
+        if resolution and resolution.get('action') == 'rename' and resolution.get('new_name'):
+            name = resolution['new_name']
+
+        amount = float(f.get('amount') or 0)
+        hours = float(f.get('hours') or 0)
+        if amount <= 0 or hours <= 0:
+            # fee_manager.add_payment 本身拒绝非正数；这里显式跳过便于计数
+            skipped += 1
+            continue
+        date = str(f.get('date') or '') or datetime.now().strftime('%Y-%m-%d')
+        method = str(f.get('method') or '')
+        note = str(f.get('note') or '')
+
+        key = _fee_key(name, date, amount, hours, method, note)
+        if key in existing:
+            skipped += 1
+            continue
+        try:
+            ok = fee_manager.add_payment(target_dir, name, date, amount, hours, method, note)
+        except (FileNotFoundError, PermissionError, ValueError) as e:
+            logging.error(f'手机收费入账失败 [{name}]：{e}', exc_info=True)
+            skipped += 1
+            continue
+        if ok:
+            existing.add(key)
+            added += 1
+        else:
+            skipped += 1
+
+    if progress_cb and (added or skipped):
+        progress_cb(f'手机端收费入账：新增 {added} 笔'
+                    + (f'，跳过重复 {skipped} 笔' if skipped else ''))
+    return added, skipped
 
 
 def _existing_lesson_keys(target_dir: str) -> set:

@@ -67,6 +67,10 @@ TABLE_LESSONS = 'lessons'
 TABLE_PACKAGES = 'lesson_packages'  # Room 默认蛇形
 TABLE_PACKAGES_ALT = 'packages'  # 兼容旧版
 TABLE_ARCHIVED = 'archived_lessons'
+# 批 2（操作摩擦修复）：收费记录。手机端现场收款落库于此表，
+# 随备份回传桌面端；自然键（学员|日期|金额|课时|方式|备注）与
+# Android FeeRecord.stableKey 一致，桌面端据此去重。
+TABLE_FEES = 'fee_records'
 
 
 def _connect_db(db_path: str) -> sqlite3.Connection:
@@ -185,12 +189,32 @@ def _normalize_package(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_fee(row: Dict[str, Any]) -> Dict[str, Any]:
+    """归一化 fee_records 表（或 meta.fees[]）的一行为桌面端收费记录结构。
+
+    字段与 fee_manager 的收费记录列一一对应：
+    日期 | 学员 | 金额 | 课时数 | 收款方式 | 备注。
+
+    这些字段同时构成跨端去重自然键（Android 侧由 FeeRecord.stableKey 生成主键），
+    因此**不要在此处做额外清洗**（除首尾空白外），否则同一条收费在两端
+    会算出不同的键而各成一行。
+    """
+    return {
+        'student_name': str(_pick(row, 'student_name', 'studentName', default='') or '').strip(),
+        'date': str(_pick(row, 'date', default='') or '').strip(),
+        'amount': float(_pick(row, 'amount', default=0) or 0),
+        'hours': float(_pick(row, 'hours', default=0) or 0),
+        'method': str(_pick(row, 'method', default='') or '').strip(),
+        'note': str(_pick(row, 'note', default='') or '').strip(),
+    }
+
+
 def parse_db(db_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """解析 Android .db 文件，返回 {students, lessons, packages}。
 
     表缺失时返回空列表，不抛异常。
     """
-    result = {'students': [], 'lessons': [], 'packages': []}
+    result = {'students': [], 'lessons': [], 'packages': [], 'fees': []}
     with _connect_db(db_path) as conn:
         tables = set(_list_tables(conn))
 
@@ -225,6 +249,14 @@ def parse_db(db_path: str) -> Dict[str, List[Dict[str, Any]]]:
                 if item['student_name']:
                     result['packages'].append(item)
 
+        # 收费记录（批 2）：表内既含手机端现场录入的收款，也含 PC 下发的镜像。
+        # 桌面端导入时按自然键去重，因此把 PC 自己下发的记录再读回来不会重复计账。
+        if TABLE_FEES in tables:
+            for row in _query_all(conn, TABLE_FEES):
+                item = _normalize_fee(row)
+                if item['student_name']:
+                    result['fees'].append(item)
+
     return result
 
 
@@ -247,7 +279,7 @@ def parse_meta_json(json_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]
     except (json.JSONDecodeError, OSError):
         return None
 
-    result = {'students': [], 'lessons': [], 'packages': []}
+    result = {'students': [], 'lessons': [], 'packages': [], 'fees': []}
     for key in result:
         items = data.get(key, [])
         if not isinstance(items, list):
@@ -256,6 +288,8 @@ def parse_meta_json(json_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]
             'students': _normalize_student,
             'lessons': _normalize_lesson,
             'packages': _normalize_package,
+            # 批 2：手机端现场收款（BackupManager 导出的 fees[]）
+            'fees': _normalize_fee,
         }[key]
         for row in items:
             if not isinstance(row, dict):
@@ -307,7 +341,7 @@ def parse_android_backup(zip_path: str, extract_dir: str,
     """
     import zipfile
 
-    result = {'students': [], 'lessons': [], 'packages': []}
+    result = {'students': [], 'lessons': [], 'packages': [], 'fees': []}
     if not os.path.exists(zip_path):
         return result
 
@@ -400,4 +434,8 @@ def summarize(parsed: Dict[str, List[Dict[str, Any]]]) -> str:
     s = len(parsed.get('students', []))
     l = len(parsed.get('lessons', []))
     p = len(parsed.get('packages', []))
-    return f'Android 数据解析完成：学员 {s} 人，课时明细 {l} 条，课时包 {p} 个'
+    f = len(parsed.get('fees', []))
+    text = f'Android 数据解析完成：学员 {s} 人，课时明细 {l} 条，课时包 {p} 个'
+    if f:
+        text += f'，收费记录 {f} 笔'
+    return text
