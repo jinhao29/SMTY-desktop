@@ -100,3 +100,5 @@ training_tool/_verify_*.py
 /docs/reports/
 # pytest 临时产物
 student_sports_tool/_junit.xml
+# 真机验证留档与临时脚本（2026-09-13）
+_device_archive/
