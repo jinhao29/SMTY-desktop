@@ -25,6 +25,7 @@ from template_manager import (
     delete_custom_template, is_custom
 )
 from template_recommender import recommend_templates, extract_weaknesses
+from styles import Palette
 
 
 class TemplateLibraryWindow(QWidget):
@@ -90,11 +91,11 @@ class TemplateLibraryWindow(QWidget):
         self.lbl_name = QLabel('请选择模板')
         _f2 = QFont('微软雅黑'); _f2.setPointSize(14); _f2.setBold(True)
         self.lbl_name.setFont(_f2)
-        self.lbl_name.setStyleSheet('color:#FF6B47;')
+        self.lbl_name.setStyleSheet(f'color:{Palette.ACCENT};')
         dl.addWidget(self.lbl_name)
 
         self.lbl_meta = QLabel('')
-        self.lbl_meta.setStyleSheet('color:#9B9B9B; font-size:12px;')
+        self.lbl_meta.setStyleSheet(f'color:{Palette.TEXT_SUB}; font-size:12px;')
         dl.addWidget(self.lbl_meta)
 
         self.lbl_goal = QLabel('')
@@ -130,7 +131,7 @@ class TemplateLibraryWindow(QWidget):
             _cat_font.setPointSize(12)
             _cat_font.setBold(True)
             cat_item.setFont(0, _cat_font)
-            cat_item.setForeground(0, QColor('#FF6B47'))
+            cat_item.setForeground(0, QColor(Palette.ACCENT))
             for tpl in self._templates:
                 if tpl['category'] == cat:
                     name = tpl['name']

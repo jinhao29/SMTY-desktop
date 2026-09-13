@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""UI 层：训练任务编排工具主窗口（灰白简约 · 蓝紫强调，对齐图2 设计语言）。
+"""UI 层：训练任务编排工具主窗口（灰白卡片 · 珊瑚橙强调，全局统一设计语言）。
 
 职责：
 - 顶部导航栏（独立运行时显示：Logo + 标题 + 搜索 + 同步 + 教练；嵌入 app.py 时由外层提供）
@@ -8,8 +8,8 @@
 - 底部状态栏：当前编辑状态
 
 设计语言（styles.py 令牌，仅作用域 #training_root）：
-- 背景 #F2F4F8 / 卡片 #FFFFFF / 圆角 12px / 强调色 #5B6BF7
-- 不污染全局珊瑚橙主题，其它业务模块视觉零影响
+- 背景/卡片 #FFFFFF / 圆角 12px / 强调色 #FF6B47（珊瑚橙，与全局及 Android 端统一）
+- 不污染全局主题，其它业务模块视觉零影响
 
 业务逻辑（导出 / 打开文件夹 / 模板库 / 截图发到手机）接线保持不变，
 仅把按钮从原底部导出栏迁移到右列操作面板。
@@ -350,8 +350,8 @@ class MainWindow(QMainWindow):
         dialog.info(
             self, '关于',
             '上门体育教学管理平台 · 训练任务编排\n'
-            '灰白简约主题 v2.0\n'
-            '卡片式布局 · 蓝紫强调'
+            '灰白卡片主题 v2.0\n'
+            '卡片式布局 · 珊瑚橙强调'
         )
 
     def closeEvent(self, event):
@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    # 独立运行：加载本模块灰白蓝紫主题（作用域 #training_root）
+    # 独立运行：加载本模块灰白卡片主题（作用域 #training_root）
     try:
         from theme import LIGHT_QSS
         app.setStyleSheet(LIGHT_QSS)  # 全局兜底（对话框等仍用珊瑚橙）

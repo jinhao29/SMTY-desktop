@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""训练任务编排模块布局组件（灰白简约 · 蓝紫强调）。
+"""训练任务编排模块布局组件（灰白卡片 · 珊瑚橙强调）。
 
 组件：
 - TopNavBar：顶部导航栏（Logo + 标题 + 搜索 + 同步状态 + 教练下拉）
@@ -25,7 +25,7 @@ from cards import Card
 class SyncDot(QWidget):
     """绿点 + 文字的同步状态指示器。
 
-    状态机：idle(灰·待命) / ok(绿·完成) / syncing(蓝紫·同步中) / error(红·失败)
+    状态机：idle(灰·待命) / ok(绿·完成) / syncing(珊瑚橙·同步中) / error(红·失败)
     """
     _STYLES = {
         'idle':    (Palette.MUTED, '同步待命'),
