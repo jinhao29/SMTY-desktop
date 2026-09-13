@@ -16,7 +16,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTabWidget, QFileDialog, QMessageBox, QComboBox, QSpinBox,
-    QCheckBox, QGroupBox, QFrame
+    QCheckBox, QGroupBox, QFrame, QScrollArea
 )
 
 # 注入父目录（student_sports_tool/）以便导入 base_components
@@ -40,6 +40,20 @@ from manage_components import AnimatedTabBar
 from styles import scoped_qss, Palette
 
 DEFAULT_DIR = os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案')
+
+
+def _wrap_scroll(widget):
+    """把子 Tab 面板包进滚动容器。
+
+    修复（2026-09-13 真机截图）：窗口高度不足时（如 1080×747），备份面板的
+    四张卡片会被布局强行压扁——标题裁半、按钮只剩一条线，看起来"UI 杂乱"。
+    包上 QScrollArea 后高度不足变滚动，卡片保持自然尺寸。
+    """
+    sa = QScrollArea()
+    sa.setWidgetResizable(True)
+    sa.setFrameShape(QFrame.NoFrame)
+    sa.setWidget(widget)
+    return sa
 
 
 class AutoBackupPanel(QWidget):
@@ -253,28 +267,28 @@ class DataCenterWindow(QWidget):
         """)
 
         self.panel_backup = BackupPanel(self._get_dir, on_auto_backup_clicked=self._open_auto_backup_panel)
-        self.tabs.addTab(self.panel_backup, '  数据备份与导入  ')
+        self.tabs.addTab(_wrap_scroll(self.panel_backup), '  数据备份与导入  ')
 
         # === 自动备份配置面板（频率/保留份数/设置）===
         # 配置直接写入 _data_center_config.json，auto_backup_manager 每分钟重读生效
         self.panel_auto_backup = AutoBackupPanel(self._get_dir)
-        self.tabs.addTab(self.panel_auto_backup, '  自动备份设置  ')
+        self.tabs.addTab(_wrap_scroll(self.panel_auto_backup), '  自动备份设置  ')
 
         self.panel_report = ReportPanel(self._get_dir)
-        self.tabs.addTab(self.panel_report, '  一键成长报告  ')
+        self.tabs.addTab(_wrap_scroll(self.panel_report), '  一键成长报告  ')
 
         self.panel_renewal = RenewalPanel(self._get_dir)
-        self.tabs.addTab(self.panel_renewal, '  课时与续费提醒  ')
+        self.tabs.addTab(_wrap_scroll(self.panel_renewal), '  课时与续费提醒  ')
 
         # === v5 优化5 新增：训练达成率偏差分析面板 ===
         # 对比 Android 端排课计划与本地课时记录，自动生成"训练达成率"图表
         # 教练可截图发家长，展示专业教学管理能力
         self.panel_achievement = ScheduleAchievementPanel(self._get_dir)
-        self.tabs.addTab(self.panel_achievement, '  训练达成率分析  ')
+        self.tabs.addTab(_wrap_scroll(self.panel_achievement), '  训练达成率分析  ')
 
         # === 双端同步服务面板（手机推送自动合并 + 学员数据拉取）===
         self.panel_sync = SyncServerPanel(self._get_dir)
-        self.tabs.addTab(self.panel_sync, '  双端同步  ')
+        self.tabs.addTab(_wrap_scroll(self.panel_sync), '  双端同步  ')
 
         lay.addWidget(self.tabs, 1)
 
@@ -361,7 +375,11 @@ class DataCenterWindow(QWidget):
 
     def _open_auto_backup_panel(self):
         """备份面板入口按钮：切换到自动备份设置 Tab。"""
-        self.tabs.setCurrentWidget(self.panel_auto_backup)
+        # 面板已包进滚动容器：沿父链向上找到注册为 Tab 的祖先（滚动容器）再切换
+        target = self.panel_auto_backup
+        while target is not None and self.tabs.indexOf(target) < 0:
+            target = target.parentWidget()
+        self.tabs.setCurrentWidget(target or self.panel_auto_backup)
         self.panel_auto_backup.refresh()
 
     def _on_auto_backup_finished(self, success, message, timestamp):
