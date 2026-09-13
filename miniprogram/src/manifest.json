@@ -1,12 +1,12 @@
 {
   "name": "上门体育",
-  "appid": "",
+  "appid": "wx9468fa7ac474b576",
   "description": "上门体育/俱乐部管理小程序",
   "versionName": "1.0.0",
   "versionCode": "100",
   "transformPx": false,
   "mp-weixin": {
-    "appid": "",
+    "appid": "wx9468fa7ac474b576",
     "setting": {
       "urlCheck": false,
       "es6": true,

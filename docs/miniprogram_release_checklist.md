@@ -1,7 +1,8 @@
 # 小程序体验版发布清单（2026-09-10）
 
 > 目标：朋友扫码能打开并跑通核心路径。
-> 现状：后端本地 `127.0.0.1:8800`，鉴权 P0 已修，测试 120 passed，AppId 仍是 `touristappid`。
+> 现状（2026-09-13）：后端本地 `127.0.0.1:8800`，鉴权 P0 已修，测试 120 passed；
+> **正式 AppId `wx9468fa7ac474b576` 已替换进 `miniprogram/src/manifest.json`**，剩余步骤见 §4。
 
 ---
 
@@ -131,8 +132,8 @@ VITE_API_BASE_URL=https://你的域名
 ## 4. 验证清单
 
 ### 方案 A
-- [ ] 正式 AppId 已拿到
-- [ ] `manifest.json` 的 appid 已替换
+- [x] 正式 AppId 已拿到（wx9468fa7ac474b576，2026-09-13）
+- [x] `manifest.json` 的 appid 已替换
 - [ ] `npx uni build -p mp-weixin` 构建成功
 - [ ] 开发者工具上传成功，版本管理里能看到
 - [ ] 已设为体验版
