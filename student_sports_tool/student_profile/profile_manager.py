@@ -9,6 +9,7 @@
 """
 import os
 import sys
+import logging
 
 # 确保能导入同级模块和父目录的 lesson_manager
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -250,14 +251,14 @@ def delete_student_permanently(archive_dir: str, name: str) -> bool:
                 break
         lm._save_wb(fpath, wb)
     except Exception:
-        pass
+        logging.exception('删除学员 %s：课时明细/汇总清理失败（数据残留）', name)
 
     # 4. 收费记录
     try:
         for rec in fm.get_payments(archive_dir, name):
             fm.delete_payment(archive_dir, rec['row'])
     except Exception:
-        pass
+        logging.exception('删除学员 %s：收费记录清理失败（数据残留）', name)
 
     lm._invalidate_meta_index(archive_dir)
     _notify_data_changed()
