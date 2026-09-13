@@ -9,6 +9,39 @@
 """
 from standards import Std, MORE, LESS
 
+# 全角 ASCII（U+FF01-U+FF5E）→ 半角：整体平移该偏移
+_FULLWIDTH_OFFSET = 0xFEE0
+
+
+def normalize_input(raw) -> str:
+    """全角 → 半角归一化。
+
+    真机来源（2026-09-13，Android 侧 vivo）：中文输入法在成绩输入框里句点输出为
+    全角「。」，成绩被判「格式错误」。PC 端成绩列同为自由文本
+    （main_window.py:333 `item.text().strip()`），同类问题成立，故两端同口径。
+
+    规则（与 Android `Scorer.normalizeInput` 同一张映射表）：
+    1. U+FF01-U+FF5E 全角 ASCII 整体平移 0xFEE0（覆盖 ．：＇＂＋－ 与 ０-９）
+    2. 「。」U+3002 → '.'
+    3. 「−」U+2212 → '-'
+
+    ⚠️ 改这张表必须同步 Android Scorer.kt；test_standards_parity.py 已锚定两端规则。
+    """
+    if raw is None:
+        return ''
+    out = []
+    for ch in str(raw):
+        code = ord(ch)
+        if 0xFF01 <= code <= 0xFF5E:
+            out.append(chr(code - _FULLWIDTH_OFFSET))
+        elif ch == '\u3002':
+            out.append('.')
+        elif ch == '\u2212':
+            out.append('-')
+        else:
+            out.append(ch)
+    return ''.join(out)
+
 
 def parse_value(raw: str, unit: str) -> float:
     """将用户输入解析为数值。
@@ -16,6 +49,7 @@ def parse_value(raw: str, unit: str) -> float:
     支持格式：
     - 秒/次/米/cm/ml: 直接数字，如 '13.8'、'592'
     - 分秒: '4'05"'/'4:05'/'245' → 秒数
+    - 全角输入自动归一化：'7。5' ≡ '7.5'、'4：05' ≡ '4:05'（见 normalize_input）
 
     ⚠️ 负数成绩显式拒绝（与 Android Scorer.kt v50 语义对齐）：
     负值在 direction=LESS 的项目里会走 `val <= full` 分支直接拿 100 分，
@@ -23,7 +57,8 @@ def parse_value(raw: str, unit: str) -> float:
     """
     if raw is None:
         raise ValueError('成绩为空')
-    s = str(raw).strip()
+    # 全角→半角（中文输入法句点/冒号/引号；与 Android 同口径）
+    s = normalize_input(raw).strip()
     if not s:
         raise ValueError('成绩为空')
     # 分秒格式：含 ' : 或 " 的，解析为秒

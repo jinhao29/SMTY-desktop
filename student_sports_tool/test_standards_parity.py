@@ -17,12 +17,16 @@
 先确认真源（深圳市教育局 / 国家学生体质健康标准），同步两端数值，
 **不要改测试去迁就某一端**。
 
-已知差异（暂不阻断，需后续修复，见 2026-09-12 审查报告）
--------------------------------------------------------
-Android `Scorer.kt` 的负数成绩校验（v50）只覆盖非「分秒」分支：
-`parseValue()` 对 unit=="分秒" 直接 return parseTime()，绕过了 `value < 0` 检查，
-故分秒类项目输入 "-5" 仍会命中 `value <= full` 直接得 100 分。
-PC 侧（scorer.py）已两分支同时拦截。Android 侧待修。
+已修复的差异（保留说明，防止回退）
+--------------------------------
+1. 负数成绩校验（v50）：Android `Scorer.kt` 的 parseValue 曾只覆盖非「分秒」分支，
+   分秒类项目输入 "-5" 会命中 `value <= full` 直接得 100 分。
+   2026-09-12 已修：分秒分支前置 `startsWith("-")` 拦截，与 PC 两分支拦截同口径。
+
+2. 全角输入（2026-09-13，真机观察项）：两端成绩输入均为自由文本，中文输入法
+   句点输出全角「。」导致「格式错误」。两端同步加入全角→半角归一化
+   （Android `Scorer.normalizeInput` ↔ PC `scorer.normalize_input`），
+   由下方第 13 节锁定规则一致。
 """
 import os
 import re
@@ -290,7 +294,7 @@ def test_calc_score_end_to_end_by_grade(grade, std_name, raw, expected_score):
 @pytest.mark.parametrize('unit,raw', [
     ('次', '-5'),
     ('秒', '-5'),
-    ('分秒', '-5'),          # Android 侧此分支尚未拦截（见模块 docstring）
+    ('分秒', '-5'),          # Android v50 已同口径拦截（见模块 docstring 已修复差异 1）
     ('分秒', "-1'00"),
 ])
 def test_negative_value_is_rejected(unit, raw):
@@ -372,3 +376,69 @@ def test_excel_sheet_generation_for_junior_senior(tmp_path, code, name, expect_t
     std_names = [s.name for s in S.get_standards_by_grade(grade)]
     missing = [n for n in std_names if n not in col_a]
     assert not missing, f'{expect_tag}档案缺少项目：{missing}'
+
+
+# ---------------------------------------------------------------------------
+# 13. 全角输入归一化（2026-09-13 真机观察项，两端同口径）
+# ---------------------------------------------------------------------------
+# 来源：Android 真机（vivo）上中文输入法把成绩句点打成全角「。」→「格式错误」。
+# PC 成绩列同为自由文本（main_window.py:333），故两端都必须归一化，否则
+# 同一份成绩在手机能录、在电脑报错（或反之）。
+_KT_FULLWIDTH_TOKENS = ('0xFF01', '0xFF5E', '0xFEE0', '0x3002', '0x2212')
+
+
+def test_fullwidth_rule_tokens_present_in_android_scorer():
+    """锚定：Android Scorer.kt 必须保留与 PC 同一张全角映射表的五个关键常量。
+
+    允许 Kotlin 侧重排/改写法，但这五个语义值不得消失——少一个即意味着
+    两端规则集分叉（例如删掉「。」规则，手机端又会「格式错误」）。
+    """
+    kt = _read(KT_SCORER)
+    missing = [t for t in _KT_FULLWIDTH_TOKENS if t not in kt]
+    assert not missing, (
+        f'Android Scorer.kt 缺少全角归一化规则常量 {missing}；'
+        f'改规则必须两端同步（PC scorer.normalize_input）')
+
+
+@pytest.mark.parametrize('raw,unit,expected', [
+    ('7。5', '秒', 7.5),          # 真机原样：全角句点
+    ('７。５', '秒', 7.5),         # 全角数字 + 全角句点
+    ('７５', '秒', 75.0),          # 纯全角数字
+    ('４＇０５＂', '分秒', 245.0),  # 全角分秒引号 4分05秒
+    ('1：05', '分秒', 65.0),       # 全角冒号（分:秒 语义，与 Android `1:05→65.0` 同口径）
+    ('4：05', '分秒', 245.0),      # 同上，进位到分
+])
+def test_fullwidth_input_parses_like_halfwidth(raw, unit, expected):
+    assert SC.parse_value(raw, unit) == expected
+
+
+@pytest.mark.parametrize('raw,unit', [
+    ('－5', '秒'),      # 全角连字符 U+FF0D
+    ('−5', '秒'),      # 真减号 U+2212
+    ('－5', '分秒'),
+    ('−1：05', '分秒'),
+])
+def test_fullwidth_negative_still_rejected(raw, unit):
+    """归一化不得成为绕过负数拦截的后门。"""
+    with pytest.raises(ValueError):
+        SC.parse_value(raw, unit)
+
+
+def test_halfwidth_and_unit_chars_unchanged_by_normalize():
+    """回归：半角输入与「分」「秒」等中文单位字不得被改写。"""
+    assert SC.normalize_input('7.5') == '7.5'
+    assert SC.normalize_input("4'05\"") == "4'05\""
+    assert SC.normalize_input('abc') == 'abc'
+    assert SC.normalize_input('4分05秒') == '4分05秒'
+
+
+def test_fullwidth_scoring_equals_halfwidth_scoring():
+    """端到端：全角录入与半角录入得到完全相同的分数（用户视角「看着对就该对」）。"""
+    std = S.find_std(S.ZHONGKAO_2026, '1000米跑')
+    assert std is not None and std.unit == '分秒', '1000米跑应为分秒项目'
+
+    full = SC.calc_score(std, '男', '４：０５')
+    half = SC.calc_score(std, '男', '4:05')
+    assert full['ok'] is True and half['ok'] is True
+    assert abs(full['score'] - half['score']) < 1e-9
+    assert full['value'] == half['value']
