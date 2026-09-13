@@ -61,6 +61,37 @@ def test_fingerprint_matches_der_sha256(archive_dir):
     assert fp == expected and len(base64.b64decode(fp)) == 32
 
 
+# 跨端锚定向量：与 android_app SyncTlsTrustTest.ANCHOR_CERT_PEM 同一证书
+# （RSA 2048，CN=shangmentiyu-sync-anchor），两端指纹算法必须输出同一字符串。
+# 勿单端改动：改任一侧向量/算法前先对齐两端（对齐 sync_beacon/SyncPacketAuth 同款纪律）。
+ANCHOR_CERT_PEM = """-----BEGIN CERTIFICATE-----
+MIIC0jCCAbqgAwIBAgIUFZF9F4QkioPLlaC2R48Oc1//V/owDQYJKoZIhvcNAQEL
+BQAwIzEhMB8GA1UEAwwYc2hhbmdtZW50aXl1LXN5bmMtYW5jaG9yMB4XDTI2MDkx
+MjA2MDQ1M1oXDTM2MDkxMDA2MDQ1M1owIzEhMB8GA1UEAwwYc2hhbmdtZW50aXl1
+LXN5bmMtYW5jaG9yMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAo2uC
+dr8GgxfpHe0RLxSI9+jWgRshcZlf3bja88VmSILQNAd7WDvKRps7p9FKkC9AzA0X
+bfhjaO5krgvLH9Kc7loN0GKxEpgTxhJ5WWR1yKfbrlU9ZJRy6oiHICf17MMaCc9S
+fYKtf9S99mLPf7hV7DcRVDhVMnGkbD/n+v6naBRILYFqefVVDcwpzwuqOIFsSAuv
+V4V+RZi7jlQu2EO7mrHJGO3EHpqEF9rWAkPK6YkyPst/NttsKpWgcdo2NNLWZuJz
+WtCca6hxD5sZpTOu00GQK9pHtTNyQkrhbOz3VVO9dhhjYgBJYttFO7eHEIlI3VaN
+8q3DWv7/7uXwOP515wIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQAozL4WcadWT/UQ
+aDBR7D0dJvF/VkMmqBSel9uESBCvz4OPLiZynIY3pW/SXGrClvvqe9V6ENIBqgDt
+sdhWkRHZsZ2RXFkn0RBNRAgssMF4igI6GJrCJBfPvOhMR/cwOkMJ+bwR1V1v4033
+D4BkzmNTQxQ3S244dFKw3tdMLySC2XmWL3zWh3NFnoehLl8aLWU9/47hUCQYxTn7
+o3McYJ6NUXDaKfNZg/tFiPBK93HCtqLYW6UMbNXk6tMZUz3mHxGbSLwdFTAKD365
+gqv3HLj8SK6T066yUSpqO0Tg3JS7FA552cCy76Mj8SYZ8d8bd1XV0SyyX3sFH7TA
+9YSMj++f
+-----END CERTIFICATE-----"""
+ANCHOR_FINGERPRINT = '1cdEvoqG4f3VLytC+4QNGBO5Fl/j+me7F36O6EjomwA='
+
+
+def test_fingerprint_cross_end_anchor(tmp_path):
+    """与 Android 端 SyncTlsTrustTest 共用同一证书向量，两端输出必须逐字节一致。"""
+    pem_path = tmp_path / 'anchor.pem'
+    pem_path.write_text(ANCHOR_CERT_PEM, encoding='ascii')
+    assert cert_fingerprint(str(pem_path)) == ANCHOR_FINGERPRINT
+
+
 def test_https_server_health_roundtrip(archive_dir, tmp_path):
     ensure_cert(archive_dir)
     ctx = build_ssl_context(archive_dir)
