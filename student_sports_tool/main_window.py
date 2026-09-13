@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QComboBox, QRadioButton, QButtonGroup,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit,
-    QMessageBox, QFileDialog, QDateEdit, QFrame, QScrollArea, QSizePolicy
+    QMessageBox, QFileDialog, QDateEdit, QFrame, QScrollArea, QSizePolicy,
+    QDialog, QFormLayout, QSpinBox
 )
 
 from standards import (get_primary_standards, get_zhongkao_standards,
@@ -28,8 +29,174 @@ from ui_components import (
     ColorPalette, FontHelper, FormSheet, StatCard, IconBox
 )
 import archive_controller as ac
+import lesson_manager as lm
+from lesson_window import LessonWindow
 
 DEFAULT_DIR = os.path.join(os.path.expanduser('~'), 'Desktop', '学员档案')
+
+_feedback_storage_cache = None
+
+
+def feedback_storage():
+    """按需加载 training_tool/feedback_storage（该模块按顶层名导入，需先补 path）。
+
+    批 1 接线：feedback_storage 此前从未被 UI 调用过。
+    """
+    global _feedback_storage_cache
+    if _feedback_storage_cache is None:
+        import sys
+        _tt = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'training_tool')
+        if _tt not in sys.path:
+            sys.path.insert(0, _tt)
+        import feedback_storage as _mod
+        _feedback_storage_cache = _mod
+    return _feedback_storage_cache
+
+
+class LessonFeedbackDialog(QDialog):
+    """课后反馈录入（7 字段）。
+
+    批 1 接线：把 training_tool/feedback_storage 接到 UI —— 该模块此前只有定义与导出，
+    全项目没有任何 UI 调用。落盘到档案目录下「课堂反馈.xlsx」，与「课时记录.xlsx」
+    各自成文件、互不干扰（已由 _verify_b1_wiring.py 验证）。
+
+    字段映射（D3：只做映射，不统一字段）；文档见
+    docs/reports/feedback_field_mapping.md（本地文档，未入库）：
+
+        PC「课堂反馈.xlsx」    Android Lesson
+        ------------------    ------------------
+        日期                  date
+        学员                  studentName
+        训练内容              content（PC 纯文本 / Android 结构化 JSON）
+        完成度(%)             无直映（Android 用 performance 1-10 + summary）
+        学员状态              attitude（两端预设项一致）
+        教练评语              coachComment
+        下次课建议            nextGoal
+    """
+
+    #: 与 Android 端「训练态度」快捷项对齐（LessonScreen.kt quickAttitudes）
+    STATES = ['认真', '专注', '积极', '一般', '需努力', '散漫', '分心', '懒散']
+
+    def __init__(self, dir_path, students, default_name='', parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('课后反馈')
+        self.resize(600, 680)
+        self._dir_path = dir_path
+        self._init_ui(students, default_name)
+        self._reload_history()
+
+    def _init_ui(self, students, default_name):
+        lay = QVBoxLayout(self)
+        lay.setSpacing(10)
+        lay.setContentsMargins(18, 18, 18, 18)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        self.cb_name = QComboBox()
+        self.cb_name.addItems(students)
+        if default_name and default_name in students:
+            self.cb_name.setCurrentText(default_name)
+        self.cb_name.currentIndexChanged.connect(self._reload_history)
+
+        self.dte = QDateEdit(QDate.currentDate())
+        self.dte.setCalendarPopup(True)
+        self.dte.setDisplayFormat('yyyy-MM-dd')
+
+        self.le_content = QLineEdit(placeholderText='如：体能训练、跳绳强化...')
+
+        self.sb_completion = QSpinBox()
+        self.sb_completion.setRange(0, 100)
+        self.sb_completion.setValue(100)
+        self.sb_completion.setSuffix(' %')
+
+        self.cb_state = QComboBox()
+        self.cb_state.setEditable(True)          # 允许自由输入，不锁死枚举
+        self.cb_state.addItems(self.STATES)
+        self.cb_state.setCurrentText('认真')
+
+        self.te_comment = QTextEdit()
+        self.te_comment.setPlaceholderText('教练评语（写给家长，可多行）')
+        self.te_comment.setFixedHeight(90)
+
+        self.te_next = QTextEdit()
+        self.te_next.setPlaceholderText('下次课建议')
+        self.te_next.setFixedHeight(70)
+
+        form.addRow('学员：', self.cb_name)
+        form.addRow('日期：', self.dte)
+        form.addRow('训练内容：', self.le_content)
+        form.addRow('完成度：', self.sb_completion)
+        form.addRow('学员状态：', self.cb_state)
+        form.addRow('教练评语：', self.te_comment)
+        form.addRow('下次课建议：', self.te_next)
+        lay.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_close = QPushButton('关闭', objectName='secondary')
+        btn_close.clicked.connect(self.reject)
+        self.btn_save = QPushButton('保存反馈', objectName='primary')
+        self.btn_save.clicked.connect(self.on_save)
+        btn_row.addStretch(1)
+        btn_row.addWidget(btn_close)
+        btn_row.addWidget(self.btn_save)
+        lay.addLayout(btn_row)
+
+        lay.addWidget(QLabel('最近反馈（回读自「课堂反馈.xlsx」）'))
+        self.te_history = QTextEdit()
+        self.te_history.setReadOnly(True)
+        self.te_history.setFixedHeight(160)
+        lay.addWidget(self.te_history)
+
+    def _reload_history(self):
+        """按当前学员回读最近反馈，验证「保存 → 回读」闭环。"""
+        name = self.cb_name.currentText().strip()
+        if not name:
+            self.te_history.setPlainText('')
+            return
+        try:
+            rows = feedback_storage().get_feedback_history(self._dir_path, name, limit=8)
+        except Exception as e:                    # 文件损坏/被占用不应打断录入
+            self.te_history.setPlainText(f'读取失败：{e}')
+            return
+        if not rows:
+            self.te_history.setPlainText('（暂无反馈记录）')
+            return
+        blocks = [
+            f"{r['date']}  完成度 {r['completion']}%  {r['state']}\n"
+            f"  内容：{r['content']}\n"
+            f"  评语：{r['comment']}\n"
+            f"  下次：{r['next']}"
+            for r in rows
+        ]
+        self.te_history.setPlainText('\n\n'.join(blocks))
+
+    def on_save(self):
+        """保存反馈（调用既有 feedback_storage.save_feedback，不新写存储逻辑）。"""
+        name = self.cb_name.currentText().strip()
+        if not name:
+            dialog.warn(self, '提示', '请选择学员')
+            return
+        try:
+            ok = feedback_storage().save_feedback(
+                self._dir_path, name,
+                self.le_content.text().strip(),
+                self.sb_completion.value(),
+                self.cb_state.currentText().strip(),
+                self.te_comment.toPlainText().strip(),
+                self.te_next.toPlainText().strip(),
+                self.dte.date().toString('yyyy-MM-dd'),
+            )
+        except Exception as e:
+            dialog.error(self, '保存失败', str(e))
+            return
+        if ok:
+            dialog.info(self, '保存成功', f'已写入 {name} 的课后反馈')
+            self.te_comment.clear()
+            self.te_next.clear()
+            self._reload_history()
+        else:
+            dialog.warn(self, '保存失败', '反馈未写入')
 
 
 class MainWindow(QMainWindow):
@@ -142,8 +309,13 @@ class MainWindow(QMainWindow):
         self.dte_date = QDateEdit(QDate.currentDate())
         self.dte_date.setCalendarPopup(True)
         self.dte_date.setDisplayFormat('yyyy-MM-dd')
-        self.le_lesson_count = QLineEdit(placeholderText='如 1（留空=不记录课时明细）')
-        self.le_lesson_content = QLineEdit(placeholderText='如 体能训练、跳绳强化...')
+        # 批 1（操作摩擦修复）：原「本次课时数 / 本次训练内容」两个 inline 输入框已移除。
+        # 改为接线既有实现：LessonWindow（5 字段上课记录）+ feedback_storage（7 字段课后反馈）。
+        # 职责分离——保存测评（on_save）不再顺带记课时，上课记录走独立入口。
+        self.btn_record_lesson = QPushButton('记录一次上课', objectName='secondary')
+        self.btn_record_lesson.clicked.connect(self.on_record_lesson)
+        self.btn_record_feedback = QPushButton('填写课后反馈', objectName='secondary')
+        self.btn_record_feedback.clicked.connect(self.on_record_feedback)
         self.rb_boy = QRadioButton('男')
         self.rb_girl = QRadioButton('女')
         self.rb_boy.setChecked(True)
@@ -168,7 +340,7 @@ class MainWindow(QMainWindow):
             ('性别', sex_w, '档案类型', self.cb_type),
             ('学校', self.le_school, '联系电话', self.le_phone),
             ('总课时', self.le_total_lessons, '测评日期', self.dte_date),
-            ('本次课时数', self.le_lesson_count, '本次训练内容', self.le_lesson_content),
+            ('课时记录', self.btn_record_lesson, '课后反馈', self.btn_record_feedback),
         ]
         for r, (lab1, w1, lab2, w2) in enumerate(_rows):
             form.addWidget(QLabel(lab1), r, 0)
@@ -388,8 +560,6 @@ class MainWindow(QMainWindow):
             self.le_school.clear()
             self.le_phone.clear()
             self.le_total_lessons.clear()
-            self.le_lesson_count.clear()
-            self.le_lesson_content.clear()
             self.rb_boy.setChecked(True)
             self.rb_girl.setChecked(False)
             self.lbl_history.setText('（新建学员，输入姓名后录入成绩）')
@@ -424,8 +594,6 @@ class MainWindow(QMainWindow):
     def on_clear(self):
         """清空成绩录入表格与评价（保留基本信息）。"""
         self.te_eval.clear()
-        self.le_lesson_count.clear()
-        self.le_lesson_content.clear()
         self.le_age.clear()
         self.on_type_changed(self.cb_type.currentIndex())
 
@@ -434,6 +602,59 @@ class MainWindow(QMainWindow):
         ok, msg = ac.open_lesson_file(self.le_dir.text().strip())
         if not ok:
             dialog.warn(self, '提示', msg)
+
+    def _sync_and_list_students(self, dir_path):
+        """返回课时汇总里的学员名单（先同步一次）。
+
+        ⚠️ 学员名单不来自档案目录扫描，而来自「课时记录.xlsx」的汇总表：
+        新目录下拉本来为空、要手动点一次「同步学员名单」。
+        这里顺手同步，省掉那一步（同步是幂等的，已有学员不受影响）。
+        """
+        lm.sync_students(dir_path)
+        return [d['name'] for d in lm.get_summary(dir_path)]
+
+    def on_record_lesson(self):
+        """记录一次上课 —— 打开课时记录窗口。
+
+        批 1 接线：LessonWindow（5 字段：学员/日期/课时数/训练内容/备注）此前从未被实例化。
+        同时含汇总表、明细表、编辑/删除与课时回退，全部复用其既有实现，未改其内部逻辑。
+        """
+        dir_path = self.le_dir.text().strip()
+        if not dir_path:
+            dialog.warn(self, '提示', '请先选择档案目录')
+            return
+        if not os.path.isdir(dir_path):
+            dialog.warn(self, '提示', '档案目录不存在，请先选择')
+            return
+        self._sync_and_list_students(dir_path)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle('课时记录')
+        dlg.resize(1000, 780)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(LessonWindow(dir_path, parent=dlg))
+        dlg.exec()
+        self.refresh_students()
+
+    def on_record_feedback(self):
+        """填写课后反馈 —— 打开 7 字段反馈对话框。
+
+        批 1 接线：feedback_storage 此前从未被任何 UI 调用。
+        """
+        dir_path = self.le_dir.text().strip()
+        if not dir_path:
+            dialog.warn(self, '提示', '请先选择档案目录')
+            return
+        if not os.path.isdir(dir_path):
+            dialog.warn(self, '提示', '档案目录不存在，请先选择')
+            return
+        students = self._sync_and_list_students(dir_path)
+        if not students:
+            dialog.warn(self, '提示', '该档案目录下暂无学员，请先在「学员档案」新增')
+            return
+        default_name = self.le_name.text().strip() or self.cb_student.currentText()
+        LessonFeedbackDialog(dir_path, students, default_name, self).exec()
 
     def on_save(self):
         """保存本次测评（委托 archive_controller）。"""
@@ -475,8 +696,10 @@ class MainWindow(QMainWindow):
             sheet, fpath, lesson_msg = ac.save_assessment(
                 student, dir_path,
                 total_lessons_input=self.le_total_lessons.text().strip(),
-                lesson_count_input=self.le_lesson_count.text().strip(),
-                lesson_content_input=self.le_lesson_content.text().strip(),
+                # 批 1：测评保存不再顺带记课时（原 inline 两字段已移除），
+                # 上课记录走「记录一次上课」入口（LessonWindow，5 字段）。
+                lesson_count_input='',
+                lesson_content_input='',
             )
             dialog.info(
                 self, '保存成功',
@@ -487,8 +710,6 @@ class MainWindow(QMainWindow):
             target_idx = self.cb_student.findText(name)
             if target_idx > 0:
                 self.cb_student.setCurrentIndex(target_idx)
-            self.le_lesson_count.clear()
-            self.le_lesson_content.clear()
         except PermissionError as e:
             dialog.error(
                 self, '保存失败',
