@@ -122,6 +122,18 @@ class SyncRequestHandler(BaseHTTPRequestHandler):
     def _check_token(self) -> bool:
         if not self.server_token:
             return True
+        # USB 场景豁免（2026-09-13 真机：推送 401 token mismatch）：
+        # 空 token 会自动生成随机值，但它只随 UDP 心跳广播——USB / adb reverse
+        # 场景手机收不到心跳、拿不到 token，推送必 401。
+        # 豁免条件收紧为「token 是自动生成的 且 来源为回环（127.0.0.1，数据线
+        # adb reverse 的物理直连）」；用户显式配置 token 时回环也强制校验，
+        # 内网/远程来源任何情况都强制校验。
+        if (
+            getattr(self, 'token_auto_generated', False)
+            and (self.client_address or ('', 0))[0] == '127.0.0.1'
+        ):
+            self._touch_device()
+            return True
         if self.headers.get('X-Sync-Token', '') == self.server_token:
             self._touch_device()
             return True
@@ -620,10 +632,14 @@ def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
     # 上传/拉取全部学员数据。现改为：调用方未提供 token 时自动生成随机 token，
     # 保证鉴权始终生效；手机端需通过 hello 响应或二维码获取该 token 后同步。
     effective_token = (token or '').strip()
+    token_auto_generated = not effective_token
     if not effective_token:
         effective_token = secrets.token_urlsafe(24)
         _logger.warning('未配置同步 token，已自动生成随机 token —— 手机端需重新配对方可同步')
     SyncRequestHandler.server_token = effective_token
+    # USB 场景豁免标记：仅"自动生成的 token"才豁免回环来源（见 _check_token）；
+    # 用户显式配置 token 时回环同样强制校验（安全语义不降级，锚定测试依赖此行为）。
+    SyncRequestHandler.token_auto_generated = token_auto_generated
     SyncRequestHandler.save_dir = save_dir or DEFAULT_SAVE_DIR
     SyncRequestHandler.archive_dir = archive_dir or ''
     SyncRequestHandler.pc_name = pc_name or ''

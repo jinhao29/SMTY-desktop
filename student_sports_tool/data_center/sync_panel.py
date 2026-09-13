@@ -142,6 +142,21 @@ class SyncServerPanel(QWidget):
         row4.addStretch()
         cl.addLayout(row4)
 
+        # P1-4 反馈（2026-09-13 真机 401）：空 token 会自动生成随机值，但它只随
+        # UDP 心跳广播——USB 场景手机收不到心跳、拿不到 token，推送必 401。
+        # 这里把当前生效 token 显示出来并支持复制，USB 场景在手机端手动粘贴。
+        row5 = QHBoxLayout()
+        self.lbl_eff_token = QLabel('')
+        self.lbl_eff_token.setObjectName('hint')
+        self.lbl_eff_token.setWordWrap(True)
+        row5.addWidget(self.lbl_eff_token, 1)
+        self.btn_copy_token = QPushButton('复制 token')
+        self.btn_copy_token.setObjectName('secondary')
+        self.btn_copy_token.setFixedWidth(110)
+        self.btn_copy_token.clicked.connect(self._on_copy_token)
+        row5.addWidget(self.btn_copy_token)
+        cl.addLayout(row5)
+
         self.lbl_hint = QLabel('')
         self.lbl_hint.setObjectName('hint')
         self.lbl_hint.setWordWrap(True)
@@ -251,6 +266,19 @@ class SyncServerPanel(QWidget):
     def _refresh_hint(self):
         from data_center.sync_service import get_service
         running = get_service().is_running()
+        # 当前生效 token（含空 token 自动生成的场景）：USB 场景手机收不到
+        # 心跳广播，拿不到 token 会 401——在这里展示 + 复制，手机端手动粘贴。
+        svc = get_service()
+        eff_token = str((svc.config or {}).get('token') or '') if running else ''
+        if eff_token:
+            self.lbl_eff_token.setText(
+                f'当前生效 token：{eff_token}'
+                f'（USB 数据线连接已免鉴权可直接同步；Wi-Fi 场景手机收不到心跳时，'
+                f'复制此 token 填到手机「桌面同步 → 鉴权 token」）')
+            self.btn_copy_token.show()
+        else:
+            self.lbl_eff_token.setText('')
+            self.btn_copy_token.hide()
         if running:
             self.lbl_hint.setText(
                 f'手机端配置：地址 {_local_ip()}，端口 {self.sb_port.value()}'
@@ -263,6 +291,15 @@ class SyncServerPanel(QWidget):
             self.lbl_status.setText('服务未启动')
             self.lbl_status.setStyleSheet(f'font-weight:bold; color:{Palette.MUTED};')
             self.btn_toggle.setText('启动同步服务')
+
+    def _on_copy_token(self):
+        """复制当前生效 token 到剪贴板（手机端「鉴权 token」粘贴用）。"""
+        from data_center.sync_service import get_service
+        from PySide6.QtWidgets import QApplication
+        eff = str((get_service().config or {}).get('token') or '')
+        if eff:
+            QApplication.clipboard().setText(eff)
+            self._append_log('token 已复制到剪贴板')
 
     # ---------- 服务启停（全局单例） ----------
 
