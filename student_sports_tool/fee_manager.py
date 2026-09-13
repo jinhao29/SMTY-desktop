@@ -231,11 +231,42 @@ def compute_finance(dir_path, lesson_summaries=None, fee_records=None):
     return result
 
 
-def compute_totals(finance_rows, fee_records=None, today=None):
-    """顶部统计卡数据。返回 {total_paid,total_receivable,total_due,month_paid}。
+def filter_payments(fee_records, date_from=None, date_to=None):
+    """按日期范围过滤收费记录（含端点）。
+
+    date_from / date_to 为 'YYYY-MM-DD' 字符串或 None（None = 该侧不限）。
+    日期已是 ISO 字符串，直接字典序比较即可（_norm_date 保证格式）。
+
+    批 3（操作摩擦修复）：月底要「按时间段看收支」，此前只有全量与本月两个口径。
+    """
+    if not date_from and not date_to:
+        return list(fee_records or [])
+    out = []
+    for r in (fee_records or []):
+        d = str(r.get('date') or '')
+        if not d:
+            continue
+        if date_from and d < str(date_from):
+            continue
+        if date_to and d > str(date_to):
+            continue
+        out.append(r)
+    return out
+
+
+def compute_totals(finance_rows, fee_records=None, today=None, date_from=None, date_to=None):
+    """顶部统计卡数据。
+
+    返回 {total_paid, total_receivable, total_due, month_paid, month_prefix,
+         range_paid, range_label, range_count}
 
     month_paid 需要收费明细（fee_records，get_payments() 结果）过滤当月；
     传入 None 时当月实收计 0。
+
+    批 3：给出 date_from/date_to 时额外算 range_paid（区间内实收合计）与 range_label，
+    供「按时间段对账」使用；未给时 range_paid = total_paid、range_label = '全部'。
+    ⚠️ 应收/待收**始终为全量口径**（它们由课时包决定，与时间无关），
+    只有实收随时间段变化 —— 否则同一张卡在不同筛选下会自相矛盾。
     """
     today = today or _date.today()
     month_prefix = today.strftime('%Y-%m')
@@ -243,10 +274,25 @@ def compute_totals(finance_rows, fee_records=None, today=None):
     if fee_records:
         month_paid = sum(r['amount'] for r in fee_records
                          if str(r['date']).startswith(month_prefix))
+    total_paid = round(sum(r['paid'] for r in finance_rows), 2)
+
+    if date_from or date_to:
+        ranged = filter_payments(fee_records, date_from, date_to)
+        range_paid = round(sum(r['amount'] for r in ranged), 2)
+        range_label = f"{date_from or '最早'} ~ {date_to or '至今'}"
+    else:
+        ranged = list(fee_records or [])
+        range_paid = total_paid
+        range_label = '全部'
+
     return {
-        'total_paid': round(sum(r['paid'] for r in finance_rows), 2),
+        'total_paid': total_paid,
         'total_receivable': round(sum(r['receivable'] for r in finance_rows), 2),
         'total_due': round(sum(r['due'] for r in finance_rows), 2),
         'month_paid': round(month_paid, 2),
         'month_prefix': month_prefix,
+        # 批 3：区间口径
+        'range_paid': range_paid,
+        'range_label': range_label,
+        'range_count': len(ranged),
     }

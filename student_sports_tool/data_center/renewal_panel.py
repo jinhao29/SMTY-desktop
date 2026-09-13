@@ -48,6 +48,51 @@ URGENCY_COLORS = {
 }
 
 
+def export_alert_list(parent, dir_path, default_name='续费预警清单.xlsx'):
+    """导出续费 / 欠费预警清单（xlsx）。
+
+    批 3（操作摩擦修复）：从 `RenewalPanel._export_alerts` 抽出的模块级函数，
+    供财务页「导出欠费清单」按钮复用 —— 此前财务页只能看数、不能导出，
+    想看欠费名单必须切到数据中心再导一次。
+
+    筛选口径不变：status ∈ (需续费, 已超支)。
+
+    返回导出的文件路径；用户取消或失败返回 ''。
+    """
+    path, _ = QFileDialog.getSaveFileName(
+        parent, '导出预警清单', default_name, 'Excel (*.xlsx)')
+    if not path:
+        return ''
+    if not path.endswith('.xlsx'):
+        path += '.xlsx'
+    try:
+        from data_exporter import collect_all_students
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+        students = collect_all_students(dir_path)
+        wb = Workbook()
+        ws = wb.active
+        headers = ['姓名', '状态', '剩余课时', '最近上课', '联系电话']
+        for i, h in enumerate(headers, 1):
+            c = ws.cell(row=1, column=i, value=h)
+            c.font = Font(bold=True, color='FFFFFF', name='微软雅黑')
+            c.fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+        for r, s in enumerate(students, 2):
+            if s['status'] in ('需续费', '已超支'):
+                ws.cell(row=r, column=1, value=s['name'])
+                ws.cell(row=r, column=2, value=s['status'])
+                ws.cell(row=r, column=3, value=s['remaining'])
+                ws.cell(row=r, column=4, value=s['last_date'])
+                ws.cell(row=r, column=5, value=s['phone'])
+        with file_lock(path):
+            atomic_save_workbook(wb, path)
+        dialog.info(parent, '导出成功', f'预警清单已保存到：\n{path}')
+        return path
+    except Exception as e:
+        dialog.error(parent, '导出失败', str(e))
+        return ''
+
+
 class RenewalPanel(QWidget):
     """续费预警与未上课提醒面板。"""
 
@@ -480,38 +525,8 @@ class RenewalPanel(QWidget):
         dialog.info(self, '提示', f'未找到 {name} 的电话')
 
     def _export_alerts(self):
-        """导出预警清单。"""
-        from PySide6.QtWidgets import QFileDialog
-        path, _ = QFileDialog.getSaveFileName(
-            self, '导出预警清单', '续费预警清单.xlsx', 'Excel (*.xlsx)')
-        if not path:
-            return
-        if not path.endswith('.xlsx'):
-            path += '.xlsx'
-        try:
-            from data_exporter import collect_all_students
-            from openpyxl import Workbook
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-            students = collect_all_students(self._dir_getter())
-            wb = Workbook()
-            ws = wb.active
-            headers = ['姓名', '状态', '剩余课时', '最近上课', '联系电话']
-            for i, h in enumerate(headers, 1):
-                c = ws.cell(row=1, column=i, value=h)
-                c.font = Font(bold=True, color='FFFFFF', name='微软雅黑')
-                c.fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
-            for r, s in enumerate(students, 2):
-                if s['status'] in ('需续费', '已超支'):
-                    ws.cell(row=r, column=1, value=s['name'])
-                    ws.cell(row=r, column=2, value=s['status'])
-                    ws.cell(row=r, column=3, value=s['remaining'])
-                    ws.cell(row=r, column=4, value=s['last_date'])
-                    ws.cell(row=r, column=5, value=s['phone'])
-            with file_lock(path):
-                atomic_save_workbook(wb, path)
-            dialog.info(self, '导出成功', f'预警清单已保存到：\n{path}')
-        except Exception as e:
-            dialog.error(self, '导出失败', str(e))
+        """导出预警清单（实现见模块级 export_alert_list，财务页共用）。"""
+        export_alert_list(self, self._dir_getter())
 
     def _show_muted_list(self):
         """打开免打扰名单管理对话框，可查看/恢复被误标记的学员。"""

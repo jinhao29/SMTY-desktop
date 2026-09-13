@@ -151,6 +151,9 @@ class FinancePage(QWidget):
     #==== UI 构建 ====
 
     def _build_ui(self):
+        # 批 3：对账时间段（空串 = 不限）
+        self._range_from = ''
+        self._range_to = ''
         main_lay = QHBoxLayout(self)
         main_lay.setContentsMargins(24, 16, 24, 16)
         main_lay.setSpacing(16)
@@ -250,6 +253,47 @@ class FinancePage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh)
         right_lay.addWidget(self.btn_refresh)
 
+        # --- 批 3（操作摩擦修复）：对账时间段 ---
+        # 此前财务页只能看全量汇总，月底想知道「这段时间收了多少」只能自己算。
+        range_title = QLabel('对账时间段（按收费日期）')
+        range_title.setObjectName('hint')
+        range_title.setWordWrap(True)
+        range_title.setStyleSheet('QLabel#hint { color: #6B6B6B; background: transparent; }')
+        right_lay.addWidget(range_title)
+
+        self.dte_from = QDateEdit(QDate.currentDate().addMonths(-1))
+        self.dte_from.setCalendarPopup(True)
+        self.dte_from.setDisplayFormat('yyyy-MM-dd')
+        right_lay.addWidget(self.dte_from)
+
+        self.dte_to = QDateEdit(QDate.currentDate())
+        self.dte_to.setCalendarPopup(True)
+        self.dte_to.setDisplayFormat('yyyy-MM-dd')
+        right_lay.addWidget(self.dte_to)
+
+        range_row = QHBoxLayout()
+        range_row.setSpacing(6)
+        self.btn_this_month = QPushButton('本月', objectName='secondary')
+        self.btn_this_month.setCursor(Qt.PointingHandCursor)
+        self.btn_this_month.clicked.connect(self.on_this_month)
+        self.btn_all_time = QPushButton('全部', objectName='secondary')
+        self.btn_all_time.setCursor(Qt.PointingHandCursor)
+        self.btn_all_time.clicked.connect(self.on_all_time)
+        range_row.addWidget(self.btn_this_month)
+        range_row.addWidget(self.btn_all_time)
+        right_lay.addLayout(range_row)
+
+        self.btn_apply_range = QPushButton('应用时间段', objectName='secondary')
+        self.btn_apply_range.setCursor(Qt.PointingHandCursor)
+        self.btn_apply_range.clicked.connect(self.on_apply_range)
+        right_lay.addWidget(self.btn_apply_range)
+
+        # --- 批 3：欠费清单导出（复用数据中心既有的预警导出实现）---
+        self.btn_export_due = QPushButton('导出欠费清单', objectName='secondary')
+        self.btn_export_due.setCursor(Qt.PointingHandCursor)
+        self.btn_export_due.clicked.connect(self.on_export_due)
+        right_lay.addWidget(self.btn_export_due)
+
         note = QLabel(
             '计费口径\n\n'
             '· 课时单价 = 实收 ÷ 已购课时（加权平均）\n'
@@ -279,27 +323,70 @@ class FinancePage(QWidget):
         self.refresh()
 
     def refresh(self):
-        """重读课时汇总 + 收费记录，刷新统计卡与两张表。"""
+        """重读课时汇总 + 收费记录，刷新统计卡与两张表。
+
+        批 3：按 self._range_from/_range_to 过滤收费记录（空串 = 不限）。
+        应收/待收不受时间段影响（由课时包决定），只有实收与收费记录表随范围变化。
+        """
         try:
             if not os.path.isdir(self._dir_path):
                 return
             rows = fm.compute_finance(self._dir_path)
             payments = fm.get_payments(self._dir_path)
-            totals = fm.compute_totals(rows, payments)
+            totals = fm.compute_totals(
+                rows, payments,
+                date_from=self._range_from or None,
+                date_to=self._range_to or None)
             self._fill_stats(totals)
             self._fill_finance_bar(totals)
             self._fill_student_table(rows)
-            self._fill_payment_table(payments)
+            self._fill_payment_table(
+                fm.filter_payments(payments, self._range_from or None,
+                                   self._range_to or None))
         except Exception:
             import logging
             logging.exception('财务页刷新失败')
+
+    def on_this_month(self):
+        """「本月」快捷：起始 = 当月 1 号，结束 = 今天。"""
+        today = QDate.currentDate()
+        self.dte_from.setDate(QDate(today.year(), today.month(), 1))
+        self.dte_to.setDate(today)
+        self.on_apply_range()
+
+    def on_all_time(self):
+        """「全部」快捷：清除时间段筛选，回到全量口径。"""
+        self._range_from = ''
+        self._range_to = ''
+        self.refresh()
+
+    def on_apply_range(self):
+        """应用控件里的时间段并刷新。"""
+        self._range_from = self.dte_from.date().toString('yyyy-MM-dd')
+        self._range_to = self.dte_to.date().toString('yyyy-MM-dd')
+        if self._range_from > self._range_to:
+            self._range_from, self._range_to = self._range_to, self._range_from
+        self.refresh()
+
+    def on_export_due(self):
+        """导出欠费清单（复用数据中心续费预警的既有导出实现）。"""
+        from data_center.renewal_panel import export_alert_list
+        export_alert_list(self, self._dir_path)
 
     def _fill_stats(self, totals):
         self.stat_paid.lbl_value.setText(_fmt_money(totals['total_paid']))
         self.stat_receivable.lbl_value.setText(_fmt_money(totals['total_receivable']))
         self.stat_due.lbl_value.setText(_fmt_money(totals['total_due']))
-        self.stat_month.lbl_value.setText(
-            f"{_fmt_money(totals['month_paid'])}（{totals['month_prefix']}）")
+        # 批 3：第 4 张卡跟随时间段；未筛选时保持原「本月实收」口径不变
+        ranged = bool(self._range_from or self._range_to)
+        if ranged:
+            self.stat_month.lbl_label.setText('区间实收')
+            self.stat_month.lbl_value.setText(
+                f"{_fmt_money(totals['range_paid'])}（{totals['range_count']} 笔）")
+        else:
+            self.stat_month.lbl_label.setText('本月实收')
+            self.stat_month.lbl_value.setText(
+                f"{_fmt_money(totals['month_paid'])}（{totals['month_prefix']}）")
 
     def _fill_finance_bar(self, totals):
         """刷新收入构成柱状图与图例（实收 / 待收）。"""
