@@ -94,12 +94,34 @@ ASCII 之外的中文在日志里可能显示为乱码（控制台编码），�
 
 ## 4. git 相关
 
+> ⚠️ **2026-09-14 更新：推送一律走 SSH，不要再试 HTTPS。**
+> 这个坑此前至少踩过三次，每次都被当成"网络抖动、重试即通"糊过去；本轮做实了——
+> 它是**持续性故障**，不是抖动。下面「推送通道」两行即结论。
+
+### 4.1 推送通道（结论：SSH）
+
+| 通道 | 状态 | 说明 |
+|---|---|---|
+| **SSH（唯一可用）** | ✅ | 22 端口直连可用（`ssh -T git@github.com` 能握到 publickey 拒绝那一步）。**一键脚本：根目录 `_gh_push.py <owner/repo> <workdir> <keyname>`** —— 生成无密码 key → `gh api` 注册 deploy key → SSH 推送 → 校验远端 sha，一条龙，不要手搓 |
+| **HTTPS（不可用，别试）** | ❌ 稳定 502 | 本机代理 `127.0.0.1:12516`（沙箱代理）对 `github.com` 的 CONNECT 隧道**稳定 502**。表现极具迷惑性：**`git push` exit 128 且零输出**（`2>&1 \|` 和 `*>&1` 全被吞，所以看起来"没报错"）。**唯一能看到错误原文的方式**：`git ls-remote <url> 2>err.txt` → 得到 `CONNECT tunnel failed, response 502`。**清代理直连同样 502**——Git for Windows 会读系统代理，清环境变量无效。旧笔记里的"清代理 + `Start-Process` 抓 stderr"是 HTTPS 时代的 workaround，已作废 |
+
+已注册的 deploy key（**同一公钥不能用于两个仓库**，两仓各一把，key 文件在 `~/.ssh/`）：
+
+| key 名 | 目标仓库 |
+|---|---|
+| `smty_desktop_deploy` | SMTY-desktop |
+| `smty_app_deploy` | SMTY |
+
+手搓 SSH 命令时的两个坑（脚本已处理，改脚本时会碰到）：
+- **空 passphrase 必须用 Python 传参**——PowerShell 里 `-N ""` / `-N '""'` 都会生成带密码的 key（空串被丢参）。
+- **key 路径必须用正斜杠**——反斜杠被转义吃掉，报 `Identity file ... not accessible`。
+
+### 4.2 其余
+
 | 事项 | 做法 |
 |---|---|
-| 代理 | 推拉前清掉代理：`Remove-Item Env:http_proxy,Env:https_proxy,Env:HTTP_PROXY,Env:HTTPS_PROXY` |
-| 沙箱阻断 git 原子替换 | `git commit` / `push` 报 `unable to write new index file` / `couldn't set refs/heads/main` → 命令加**提权**（`dangerouslyDisableSandbox`） |
-| push 的输出抓不到 | `git push 2>&1 \| Out-File` 什么都抓不到还会误报 exit 128；改用 `Start-Process git -ArgumentList 'push','origin','main' -NoNewWindow -Wait -RedirectStandardError $e -PassThru` 再读 `$e` |
-| 查远端真值 | `git ls-remote` 常被 `Recv failure: Connection was reset`；改用 `gh api repos/<owner>/<repo>/git/refs/heads/main --jq '.object.sha'` |
+| 沙箱阻断 git 原子替换 | `git commit` / `push` 报 `unable to write new index file` / `couldn't set refs/heads/main` → 命令加**提权**（`dangerouslyDisableSandbox`）。诊断依据：无 `index.lock`、磁盘充足、`.git` 可写，但替换失败 |
+| 查远端真值 | `git ls-remote` 在 HTTPS 下常被 `Recv failure: Connection was reset`；改用 `gh api repos/<owner>/<repo>/git/refs/heads/main --jq '.object.sha'` |
 | tracking ref 缺失 | 根仓 `git status -sb` 会显示 `[gone]` 或 `[ahead 64]`（本地 remote-tracking ref 陈旧/缺失，push 其实是成功的）。**以 gh api 的远端 sha 为唯一判据**，别信 status 的 ahead/behind |
 
 ---
