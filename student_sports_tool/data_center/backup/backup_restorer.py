@@ -286,6 +286,8 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
     packages = parsed.get('packages', [])
     # 批 2：手机端现场收款流水（自然键去重后写入 PC 收费记录）
     fees = parsed.get('fees', [])
+    # v67：手机端教练（PC 教练页改为只读镜像，李哥拍板 D2）
+    coaches = parsed.get('coaches', [])
 
     # 按学员名聚合课时明细
     lessons_by_name = {}
@@ -486,6 +488,19 @@ def _convert_android_to_excel(target_dir, assets, progress_cb=None,
     # 自然键去重；重复跳过会计数上报（不静默丢弃、不静默覆盖）
     if fees:
         _import_phone_fees(target_dir, fees, resolution_map, progress_cb)
+
+    # v67：教练只读镜像（李哥拍板 D2）
+    # 教练数据重心在 Android（薪资结算 / 排课 / 团队管理都在手机），PC 只读展示备份里的
+    # 教练，不再提供 PC 端独立编辑 —— 消除「同一份数据两端各存一份」的分裂风险。
+    # 整体替换语义（手机为真源，手机删掉的教练不会在 PC 残留）+ 恢复前自动备份兜底。
+    if coaches:
+        try:
+            import coach_manager
+            mirrored = coach_manager.replace_mirror(target_dir, coaches)
+            if progress_cb:
+                progress_cb(f'已同步手机教练 {mirrored} 位（PC 教练页为只读镜像）')
+        except (FileNotFoundError, PermissionError, ValueError) as e:
+            logging.error(f'教练镜像同步失败：{e}', exc_info=True)
 
     return new_count
 

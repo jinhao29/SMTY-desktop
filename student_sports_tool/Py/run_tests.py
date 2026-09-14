@@ -23,7 +23,7 @@ PySide6 的 Qt 事件循环与 pytest 的全局 stdout capture 冲突：
 
 期望基线
 --------
-23 个测试文件，255 passed / 0 failed（test_db_snapshot_scope.py 单独运行收集为 0，属预期）。
+24 个测试文件，264 passed / 0 failed（test_db_snapshot_scope.py 单独运行收集为 0，属预期）。
 基线变更时请同步更新本注释与 EXPECTED_TOTAL。
 
 2026-09-13 批 1 变更（操作摩擦修复）
@@ -43,6 +43,14 @@ LessonWindow（5 字段）与 feedback_storage（7 字段）此前从未被实�
 新增 test_finance_range.py（7 例，含财务页 GUI 冒烟），锁定按时间段对账口径：
 应收/待收恒为全量、实收随区间变化；「导出欠费清单」复用 renewal_panel.export_alert_list。
 248 → 255。
+
+2026-09-14 变更（双端差异补全 · 批 4：PC 教练只读镜像）
+--------------------------------------------------
+新增 test_coach_mirror.py（9 例），锁定 D2 拍板后的语义：PC 教练页数据来自手机备份
+（coach_manager.replace_mirror），只按 Android 导出的 4 字段（name/phone/specialty/status）
+展示、status→is_active 映射、整体替换幂等、**手机端删掉的教练不在 PC 残留**；
+另覆盖旧备份无 coaches[] key 不报错。
+255 → 264。
 
 2026-09-13 校正说明
 -------------------
@@ -92,7 +100,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE) if os.path.basename(HERE) in ('Py', 'py') else HERE
 
 # 期望基线（passed 数）；用于快速判断是否引入回归
-EXPECTED_TOTAL = 255
+EXPECTED_TOTAL = 264
 
 # 有界清理参数；改动前先读模块 docstring「临时目录治理」
 CLEANUP_MAX_AGE_DAYS = 7

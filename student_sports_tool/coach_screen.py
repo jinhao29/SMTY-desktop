@@ -1,14 +1,22 @@
 # -*- coding: utf-8 -*-
-"""UI 层：教练管理页面（参考管理后台布局语言，浅色珊瑚橙主题）。
+"""UI 层：教练管理页面（**只读镜像**，数据来自手机端备份）。
+
+v67（李哥拍板 D2）：教练数据的重心在 Android —— 薪资结算 / 排课 / 团队管理都在手机，
+PC 只有 6 个基础字段且不参与同步 → 同一份数据两端各存一份早晚对不上。
+本页因此改为**只读**：数据由备份恢复流程把 Android 备份里的 `coaches[]`
+灌进本地档案（`coach_manager.replace_mirror`，整体替换、以手机为真源），
+PC 不再提供新增 / 编辑 / 离职 / 删除 / 恢复入口。
 
 布局结构（与学员管理页统一）：
-1. 页头：大标题 + 计数徽章 + 副标题
-2. 工具栏：搜索框 | 刷新 | + 新增教练（主按钮）
+1. 页头：大标题 + 计数徽章 + 副标题（标注数据来源为手机备份）
+2. 工具栏：搜索框 | 刷新
 3. 筛选 chips：全部(n) / 在职(n) / 离职(n)，单选互斥
-4. 表格：头像姓名 | 电话 | 角色 | 专长 | 入职日期 | 状态徽章 | 行内操作
+4. 表格：头像姓名 | 电话 | 专长 | 状态徽章 | 操作(详情)
 5. 底部计数栏
 
-数据层：coach_manager（教练档案.xlsx，软删除离职/恢复）。
+数据层：coach_manager（教练档案.xlsx，由备份镜像整体替换）。
+说明：Android 备份只导出 name / phone / specialty / status 四个字段（不动同步协议），
+故「角色」「入职日期」「备注」三列不在此页展示。
 """
 import os
 import sys
@@ -17,8 +25,7 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProx
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableView, QHeaderView, QFrame, QDialog, QFormLayout, QComboBox,
-    QAbstractItemView, QMenu
+    QTableView, QHeaderView, QFrame, QAbstractItemView
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,17 +41,19 @@ from manage_components import (
 )
 
 # 列定义：(显示名, 数据键, 是否数值列)
+# 只读镜像：仅展示 Android 备份导出的字段 + 状态徽章 + 操作列
 COLUMNS = [
     ('姓名', 'name', False),
     ('电话', 'phone', False),
-    ('角色', 'role', False),
     ('专长', 'specialty', False),
-    ('入职日期', 'join_date', False),
     ('状态', 'status_label', False),
     ('操作', '_actions', False),
 ]
 COLUMN_COUNT = len(COLUMNS)
 HEADER_LABELS = [c[0] for c in COLUMNS]
+
+# 只读页唯一行内操作
+ROW_ACTIONS = [('详情', '_on_open_detail_index')]
 
 
 def _status_label(is_active: bool) -> str:
@@ -125,7 +134,7 @@ class CoachTableModel(QAbstractTableModel):
             return is_active
 
         if role == Qt.UserRole + 2:
-            # RowActionsDelegate 按钮组 key
+            # RowActionsDelegate 按钮组 key（只读页两组同款：仅「详情」）
             return 'active' if is_active else 'inactive'
 
         return None
@@ -144,7 +153,7 @@ class CoachTableModel(QAbstractTableModel):
 class CoachSortFilterProxyModel(QSortFilterProxyModel):
     """教练表搜索 + 状态过滤代理模型。
 
-    - 关键字匹配姓名/电话/角色/专长（不区分大小写）
+    - 关键字匹配姓名 / 电话 / 专长（不区分大小写）
     - status_filter: 'all' 仅在职 | 'inactive' 仅离职
     """
 
@@ -181,7 +190,7 @@ class CoachSortFilterProxyModel(QSortFilterProxyModel):
             return False
         if not self._keyword:
             return True
-        haystack = ' '.join(str(c.get(k, '') or '') for k in ('name', 'phone', 'role', 'specialty')).lower()
+        haystack = ' '.join(str(c.get(k, '') or '') for k in ('name', 'phone', 'specialty')).lower()
         return self._keyword in haystack
 
     def get_coach_at_proxy(self, proxy_row: int) -> dict:
@@ -194,84 +203,8 @@ class CoachSortFilterProxyModel(QSortFilterProxyModel):
         return {}
 
 
-class CoachEditDialog(QDialog):
-    """教练新增/编辑对话框：姓名/电话/角色/专长/入职日期/备注。"""
-
-    def __init__(self, parent=None, coach: dict = None):
-        super().__init__(parent)
-        coach = coach or {}
-        self.setWindowTitle('编辑教练' if coach.get('name') else '新增教练')
-        self.setMinimumWidth(420)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(24, 20, 24, 20)
-        lay.setSpacing(14)
-
-        form = QFormLayout()
-        form.setSpacing(10)
-        self.le_name = QLineEdit(coach.get('name', ''))
-        self.le_name.setPlaceholderText('教练姓名（必填）')
-        self.le_phone = QLineEdit(coach.get('phone', ''))
-        self.le_phone.setPlaceholderText('联系电话')
-        self.cb_role = QComboBox()
-        self.cb_role.setEditable(True)
-        self.cb_role.addItems(cm.ROLE_OPTIONS)
-        if coach.get('role'):
-            self.cb_role.setCurrentText(coach['role'])
-        else:
-            self.cb_role.setCurrentText('')
-        self.cb_role.lineEdit().setPlaceholderText('如 主教练 / 助理教练 / 体能教练')
-        self.le_specialty = QLineEdit(coach.get('specialty', ''))
-        self.le_specialty.setPlaceholderText('如 青少年体能 / 篮球 / 田径')
-        self.le_join = QLineEdit(coach.get('join_date', ''))
-        self.le_join.setPlaceholderText('如 2025-09-01')
-        self.le_note = QLineEdit(coach.get('note', ''))
-        self.le_note.setPlaceholderText('备注')
-        form.addRow('姓名', self.le_name)
-        form.addRow('电话', self.le_phone)
-        form.addRow('角色', self.cb_role)
-        form.addRow('专长', self.le_specialty)
-        form.addRow('入职日期', self.le_join)
-        form.addRow('备注', self.le_note)
-        lay.addLayout(form)
-
-        self.lbl_err = QLabel('')
-        self.lbl_err.setStyleSheet('color: #EF4444; font-size: 12px; background: transparent;')
-        self.lbl_err.hide()
-        lay.addWidget(self.lbl_err)
-
-        btns = QHBoxLayout()
-        btns.addStretch()
-        self.btn_cancel = QPushButton('取消')
-        self.btn_cancel.clicked.connect(self.reject)
-        self.btn_ok = QPushButton('保存')
-        self.btn_ok.setObjectName('primary')
-        self.btn_ok.clicked.connect(self._on_save)
-        btns.addWidget(self.btn_cancel)
-        btns.addWidget(self.btn_ok)
-        lay.addLayout(btns)
-
-    def _on_save(self):
-        name = self.le_name.text().strip()
-        if not name:
-            self.lbl_err.setText('请填写教练姓名')
-            self.lbl_err.show()
-            return
-        self.accept()
-
-    def get_coach(self) -> dict:
-        """收集表单为教练 dict（确认对话框后调用）。"""
-        return {
-            'name': self.le_name.text().strip(),
-            'phone': self.le_phone.text().strip(),
-            'role': self.cb_role.currentText().strip(),
-            'specialty': self.le_specialty.text().strip(),
-            'join_date': self.le_join.text().strip(),
-            'note': self.le_note.text().strip(),
-        }
-
-
 class CoachScreen(QWidget):
-    """教练管理主界面。"""
+    """教练管理主界面（只读镜像）。"""
 
     COLUMNS = HEADER_LABELS
 
@@ -293,14 +226,17 @@ class CoachScreen(QWidget):
         lay.setContentsMargins(24, 20, 24, 16)
         lay.setSpacing(12)
 
-        # 1. 页头：标题 + 计数徽章 + 副标题
-        self.header = PageHeader('教练管理', subtitle='管理教练团队、联系方式与在职状态')
+        # 1. 页头：标题 + 计数徽章 + 副标题（点明数据来源，避免误以为能在 PC 改）
+        self.header = PageHeader(
+            '教练管理',
+            subtitle='数据来自手机端备份，本页只读（新增/编辑请在手机端操作）',
+        )
         lay.addWidget(self.header)
 
-        # 2. 工具栏：搜索 | 刷新 | + 新增教练
+        # 2. 工具栏：搜索 | 刷新（只读页不提供新增入口）
         toolbar = QHBoxLayout()
         toolbar.setSpacing(10)
-        self.le_search = QLineEdit(placeholderText='搜索姓名、电话、角色或专长...')
+        self.le_search = QLineEdit(placeholderText='搜索姓名、电话或专长...')
         self.le_search.setClearButtonEnabled(True)
         self.le_search.textChanged.connect(self._on_search)
         toolbar.addWidget(self.le_search, 1)
@@ -309,11 +245,6 @@ class CoachScreen(QWidget):
         self.btn_refresh.setObjectName('secondary')
         self.btn_refresh.clicked.connect(self.refresh)
         toolbar.addWidget(self.btn_refresh)
-
-        self.btn_add = QPushButton('+ 新增教练')
-        self.btn_add.setObjectName('primary')
-        self.btn_add.clicked.connect(self.on_add)
-        toolbar.addWidget(self.btn_add)
         lay.addLayout(toolbar)
 
         # 3. 筛选 chips（单选互斥）
@@ -324,7 +255,7 @@ class CoachScreen(QWidget):
         self.chip_bar.filterChanged.connect(self._on_filter_changed)
         lay.addWidget(self.chip_bar)
 
-        # 4. 表格：头像姓名 | 电话 | 角色 | 专长 | 入职日期 | 状态 | 操作
+        # 4. 表格：头像姓名 | 电话 | 专长 | 状态 | 操作
         self.table = QTableView()
         self.table.setModel(self._proxy_model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -332,42 +263,28 @@ class CoachScreen(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.AscendingOrder)
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self._on_table_context_menu)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
 
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)   # 姓名
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)   # 电话
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)   # 角色
-        header.setSectionResizeMode(3, QHeaderView.Stretch)            # 专长（吸收剩余宽度）
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)   # 入职日期
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)   # 状态
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)   # 操作
+        header.setSectionResizeMode(2, QHeaderView.Stretch)            # 专长（吸收剩余宽度）
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)   # 状态
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)   # 操作
         header.setStretchLastSection(False)
         header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header.setFixedHeight(44)
         self.table.setMinimumHeight(400)
-        # 双击行 → 教练详情页（编辑走操作列「编辑」按钮 / 右键菜单）
+        # 双击行 → 教练详情页（只读页无编辑入口）
         self.table.doubleClicked.connect(self._on_open_detail)
 
-        # delegates：姓名头像 / 状态徽章 / 行内操作
+        # delegates：姓名头像 / 状态徽章 / 行内操作（仅「详情」）
         self.table.setItemDelegateForColumn(0, AvatarNameDelegate(self.table))
-        self.table.setItemDelegateForColumn(5, StatusBadgeDelegate(self.table))
-        self.table.setItemDelegateForColumn(6, RowActionsDelegate({
-            'active': [
-                ('详情', self._on_open_detail_index),
-                ('编辑', self._on_action_edit),
-                ('离职', self._on_action_deactivate),
-                ('删除', self._on_action_delete),
-            ],
-            'inactive': [
-                ('详情', self._on_open_detail_index),
-                ('恢复', self._on_action_reactivate),
-                ('删除', self._on_action_delete),
-            ],
-        }, self.table))
+        self.table.setItemDelegateForColumn(3, StatusBadgeDelegate(self.table))
+        self.table.setItemDelegateForColumn(
+            4, RowActionsDelegate({'active': ROW_ACTIONS, 'inactive': ROW_ACTIONS}, self.table)
+        )
         lay.addWidget(self.table, 1)
 
         # 5. 底部计数栏
@@ -385,7 +302,7 @@ class CoachScreen(QWidget):
         self.lbl_footer.setStyleSheet('color: #6B6B6B; font-size: 13px; background: transparent; border: none;')
         fl.addWidget(self.lbl_footer)
         fl.addStretch()
-        self.lbl_hint = QLabel('双击行查看详情 · 编辑走操作列「编辑」')
+        self.lbl_hint = QLabel('双击行查看详情 · 编辑请在手机端操作')
         self.lbl_hint.setStyleSheet('color: #9B9B9B; font-size: 12px; background: transparent; border: none;')
         fl.addWidget(self.lbl_hint)
         lay.addWidget(footer)
@@ -393,7 +310,10 @@ class CoachScreen(QWidget):
     #==== 数据刷新 ====
 
     def refresh(self):
-        """从存储刷新全量教练（含离职），显示层由 chips 过滤。"""
+        """从本地镜像文件刷新全量教练（含离职），显示层由 chips 过滤。
+
+        数据由备份恢复流程写入（coach_manager.replace_mirror），本页不产生写入。
+        """
         archive_dir = self._get_dir()
         if not archive_dir:
             self._source_model.set_coaches([])
@@ -438,7 +358,7 @@ class CoachScreen(QWidget):
             self.coachActivated.emit(coach['name'])
 
     def _on_open_detail(self, proxy_index):
-        """双击行：打开教练详情页（替代原双击编辑）。"""
+        """双击行：打开教练详情页。"""
         coach = self._proxy_model.get_coach_at_proxy(proxy_index.row())
         if coach.get('name'):
             self.coachActivated.emit(coach['name'])
@@ -446,128 +366,3 @@ class CoachScreen(QWidget):
     def _on_filter_changed(self, key: str):
         """chips 切换：更新代理模型状态过滤。"""
         self._proxy_model.set_status_filter(key)
-
-    def _selected_coach(self) -> dict:
-        """当前选中行的教练 dict（未选中返回空 dict）。"""
-        row = self.table.currentIndex().row()
-        if row < 0:
-            return {}
-        return self._proxy_model.get_coach_at_proxy(row)
-
-    def on_add(self):
-        archive_dir = self._get_dir()
-        if not archive_dir:
-            dialog.warn(self, '提示', '请先在「体测档案」页设置档案目录')
-            return
-        dlg = CoachEditDialog(self)
-        if dlg.exec() == QDialog.Accepted:
-            try:
-                cm.save_coach(archive_dir, dlg.get_coach())
-                self.refresh()
-            except Exception as e:
-                dialog.error(self, '保存失败', str(e))
-
-    def on_edit(self):
-        archive_dir = self._get_dir()
-        if not archive_dir:
-            return
-        coach = self._selected_coach()
-        if not coach:
-            dialog.info(self, '提示', '请先选中要编辑的教练')
-            return
-        dlg = CoachEditDialog(self, coach=coach)
-        if dlg.exec() == QDialog.Accepted:
-            try:
-                cm.save_coach(archive_dir, dlg.get_coach())
-                self.refresh()
-            except Exception as e:
-                dialog.error(self, '保存失败', str(e))
-
-    def _on_action_edit(self, index):
-        """操作列「编辑」按钮：定位选中该行后走编辑流程。"""
-        self.table.selectRow(self._proxy_model.mapFromSource(index).row())
-        self.on_edit()
-
-    def _on_action_deactivate(self, index):
-        """操作列「离职」按钮：软删除确认后停用。"""
-        if index is None or not index.isValid():
-            return
-        coach = self._source_model.get_coach_at(index.row())
-        name = coach.get('name', '')
-        if not name:
-            return
-        reply = dialog.confirm(
-            self, '确认离职',
-            f'确定将教练 [{name}] 标记为离职吗？\n（软删除：档案保留，可随时恢复）',
-        )
-        if not reply:
-            return
-        try:
-            cm.set_coach_active(self._get_dir(), name, False)
-            self.refresh()
-        except Exception as e:
-            dialog.error(self, '操作失败', str(e))
-
-    def _on_action_delete(self, index):
-        """操作列「删除」按钮：硬删除教练（确认后从教练档案移除）。"""
-        if index is None or not index.isValid():
-            return
-        coach = self._source_model.get_coach_at(index.row())
-        name = coach.get('name', '')
-        if not name:
-            return
-        reply = dialog.confirm(
-            self, '确认删除',
-            f'确定永久删除教练 [{name}] 吗？\n'
-        )
-        if not reply:
-            return
-        try:
-            cm.delete_coach(self._get_dir(), name)
-            self.refresh()
-        except Exception as e:
-            dialog.error(self, '删除失败', str(e))
-
-    def _on_action_reactivate(self, index):
-        """操作列「恢复」按钮：离职教练恢复在职。"""
-        if index is None or not index.isValid():
-            return
-        coach = self._source_model.get_coach_at(index.row())
-        name = coach.get('name', '')
-        if not name:
-            return
-        try:
-            cm.set_coach_active(self._get_dir(), name, True)
-            self.refresh()
-            dialog.info(self, '已恢复', f'教练 [{name}] 已恢复在职')
-        except Exception as e:
-            dialog.error(self, '恢复失败', str(e))
-
-    def _coach_source_index(self, name: str):
-        """按姓名定位源模型 index（找不到返回 None）。"""
-        for i, c in enumerate(self._source_model.all_coaches()):
-            if c.get('name') == name:
-                return self._source_model.index(i, 0)
-        return None
-
-    def _on_table_context_menu(self, pos):
-        """右键菜单：离职教练恢复 / 在职教练编辑与离职。"""
-        row = self.table.rowAt(pos.y())
-        if row < 0:
-            return
-        coach = self._proxy_model.get_coach_at_proxy(row)
-        if not coach:
-            return
-        name = coach.get('name', '')
-        menu = QMenu(self)
-        if not coach.get('is_active', True):
-            act = menu.addAction('恢复在职')
-            act.triggered.connect(lambda: self._on_action_reactivate(
-                self._coach_source_index(name)))
-        else:
-            act_edit = menu.addAction('编辑')
-            act_edit.triggered.connect(self.on_edit)
-            act_leave = menu.addAction('标记离职')
-            act_leave.triggered.connect(lambda: self._on_action_deactivate(
-                self._coach_source_index(name)))
-        menu.exec(self.table.viewport().mapToGlobal(pos))

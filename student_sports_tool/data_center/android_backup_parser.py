@@ -209,6 +209,22 @@ def _normalize_fee(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_coach(row: Dict[str, Any]) -> Dict[str, Any]:
+    """归一化 coaches[]（Android BackupManager 导出的教练行为）到桌面端镜像结构。
+
+    v67（李哥拍板 D2）：PC 教练页改为手机备份的**只读镜像**。
+    Android 侧只导出 4 个字段（BackupManager.generateExportMetaJson）：
+    name / phone / specialty / status —— **不动同步协议**，就地按 4 列使用，
+    角色、入职日期、备注在 PC 侧留空。
+    """
+    return {
+        'name': str(_pick(row, 'name', default='') or '').strip(),
+        'phone': str(_pick(row, 'phone', default='') or '').strip(),
+        'specialty': str(_pick(row, 'specialty', default='') or '').strip(),
+        'status': str(_pick(row, 'status', default='') or '在职').strip(),
+    }
+
+
 def parse_db(db_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """解析 Android .db 文件，返回 {students, lessons, packages}。
 
@@ -279,7 +295,7 @@ def parse_meta_json(json_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]
     except (json.JSONDecodeError, OSError):
         return None
 
-    result = {'students': [], 'lessons': [], 'packages': [], 'fees': []}
+    result = {'students': [], 'lessons': [], 'packages': [], 'fees': [], 'coaches': []}
     for key in result:
         items = data.get(key, [])
         if not isinstance(items, list):
@@ -290,12 +306,15 @@ def parse_meta_json(json_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]
             'packages': _normalize_package,
             # 批 2：手机端现场收款（BackupManager 导出的 fees[]）
             'fees': _normalize_fee,
+            # v67：教练只读镜像（BackupManager 导出的 coaches[]，仅 4 字段）
+            'coaches': _normalize_coach,
         }[key]
         for row in items:
             if not isinstance(row, dict):
                 continue
             item = normalizer(row)
-            name_key = 'name' if key == 'students' else 'student_name'
+            # 学员 / 教练以 name 为主键，其余表以 student_name 关联
+            name_key = 'name' if key in ('students', 'coaches') else 'student_name'
             if item.get(name_key):
                 result[key].append(item)
     return result

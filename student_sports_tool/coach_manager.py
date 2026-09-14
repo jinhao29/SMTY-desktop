@@ -9,7 +9,8 @@
 - 教练姓名为主键，重名视为同一教练（更新而非新增）
 - 软删除：通过隐藏 _meta 工作表的 is_active 字段标记离职状态，
   与学员档案的停用/恢复模式保持一致
-- 仅 PC 端使用（与 Android 端暂不同步，协议只覆盖学员数据）
+- 硬删除（delete_coach）保留给历史上 PC 端手工维护的场景；
+  v67 起 PC 教练页改为「手机备份只读镜像」（replace_mirror），不再提供 PC 端新增/编辑入口
 """
 import json
 import os
@@ -234,3 +235,57 @@ def delete_coach(dir_path: str, name: str) -> bool:
             return False
 
     return with_retry(_do_delete, max_retries=3, retry_interval=1.0)
+
+
+def replace_mirror(dir_path: str, coaches: list) -> int:
+    """用手机备份的 coaches[] 整体替换本地教练档案（只读镜像，以手机为真源）。
+
+    v67（李哥拍板 D2）：教练数据重心在 Android（薪资结算 / 排课 / 团队管理都在那边），
+    PC 只有 6 个基础字段且不参与同步 → 同一份数据两端各存一份，早晚对不上。
+    改为：PC 教练页只读展示手机备份里的教练，不再提供 PC 端独立编辑。
+
+    - 输入来自 Android BackupManager 导出的 coaches[]（name / phone / specialty / status），
+      角色、入职日期、备注三列留空 —— **不动同步协议**，Android 导什么就展示什么
+    - status == '在职' → is_active=True；休假 / 离职 → False
+    - 幂等：整体替换，同一份备份重复导入结果一致（不留陈旧行）
+    - 安全网：恢复流程自带「恢复前自动备份」，覆盖前数据可回滚
+
+    @param coaches: [{'name','phone','specialty','status'}]
+    @return 写入的教练条数（姓名为空的行被跳过）
+    """
+    fpath = ensure_file(dir_path)
+    rows = []
+    for c in coaches or []:
+        if not isinstance(c, dict):
+            continue
+        name = str(c.get('name') or '').strip()
+        if not name:
+            continue
+        rows.append((
+            name,
+            str(c.get('phone') or '').strip(),
+            str(c.get('specialty') or '').strip(),
+            str(c.get('status') or '在职').strip() == '在职',
+        ))
+
+    def _do_replace():
+        with file_lock(fpath, timeout=5.0):
+            wb = load_workbook(fpath)
+            ws = wb[COACH_SHEET]
+            # 清空数据行（保留表头）—— 整体替换语义，避免手机端删掉的教练在 PC 残留
+            if ws.max_row > 1:
+                ws.delete_rows(2, ws.max_row - 1)
+            meta = {'coaches': {}}
+            for i, (name, phone, specialty, is_active) in enumerate(rows, start=2):
+                ws.cell(row=i, column=1, value=name)
+                ws.cell(row=i, column=2, value=phone)
+                ws.cell(row=i, column=3, value=None)       # 角色：备份未导出
+                ws.cell(row=i, column=4, value=specialty)
+                ws.cell(row=i, column=5, value=None)       # 入职日期：备份未导出
+                ws.cell(row=i, column=6, value=None)       # 备注：备份未导出
+                meta['coaches'][name] = {'is_active': is_active, 'updated_at': _now_ms()}
+            _write_meta(wb, meta)
+            atomic_save_workbook(wb, fpath)
+            return len(rows)
+
+    return with_retry(_do_replace, max_retries=3, retry_interval=1.0)
