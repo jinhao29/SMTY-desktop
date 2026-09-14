@@ -34,6 +34,9 @@ print("register out:", (r.stdout or "").strip()[:160])
 print("register err:", (r.stderr or "").strip()[:200])
 
 # 3) SSH 推送
+# ponytail: StrictHostKeyChecking=no 是刻意妥协（本机 known_hosts 常被环境重置，省事）；
+#   代价 = 关掉 host key 校验，理论上有 MITM 面。影响面仅限本机 + 单仓 deploy key。
+#   升级路径：改 accept-new，并把 github.com 指纹预置进 ~/.ssh/known_hosts。
 os.chdir(workdir)
 ssh_cmd = "ssh -i " + key.replace("\\", "/") + " -o StrictHostKeyChecking=no -o IdentitiesOnly=yes"
 env = dict(os.environ, GIT_SSH_COMMAND=ssh_cmd)
