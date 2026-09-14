@@ -104,3 +104,6 @@ training_tool/_verify_*.py
 student_sports_tool/_junit.xml
 # 真机验证留档与临时脚本（2026-09-13）
 _device_archive/
+# 教练页真机验证截图与一次性诊断脚本（2026-09-14）
+_ui_coach/
+student_sports_tool/_diag_*.py
