@@ -86,11 +86,25 @@ def import_backup(body: ImportBody):
                 raise HTTPException(
                     status_code=400,
                     detail=f'{table} 备份含未知列：{"、".join(sorted(unknown))}，拒绝导入')
-    counts = {}
+    # 逐行导入并全程记账：跳过多少、为什么跳过都要回报给调用方，绝不静默丢弃
+    stats = {}
     for key, table, id_col in IMPORT_TABLES:
-        n = 0
+        st = {'imported': 0, 'skipped': 0, 'reasons': {}, 'samples': []}
+        stats[key] = st
+
+        def _skip(reason: str, row=None, _st=st, _samples_limit=3):
+            _st['skipped'] += 1
+            _st['reasons'][reason] = _st['reasons'].get(reason, 0) + 1
+            if len(_st['samples']) < _samples_limit and isinstance(row, dict):
+                brief = ','.join(f'{k}={row[k]}' for k in list(row)[:3])
+                _st['samples'].append(f'{brief} → {reason}')
+
         for row in (getattr(body, key) or []):
-            if not isinstance(row, dict) or id_col not in row:
+            if not isinstance(row, dict):
+                _skip('格式错：不是对象', row)
+                continue
+            if row.get(id_col) is None:
+                _skip('缺字段：没有主键 id', row)
                 continue
             cols = {k: v for k, v in row.items() if k not in IGNORED_KEYS}
             names = ','.join(cols.keys())
@@ -101,6 +115,7 @@ def import_backup(body: ImportBody):
                 existing = query_one(f"SELECT {ts_col} AS ts FROM {table} WHERE id=?",
                                      (cols[id_col],))
                 if existing and str(existing['ts'] or '') >= str(cols.get(ts_col) or ''):
+                    _skip('已有更新版本，按 LWW 未覆盖', row)
                     continue
                 sql = (f"INSERT INTO {table}({names}) VALUES({marks}) "
                        f"ON CONFLICT(id) DO UPDATE SET " +
@@ -109,11 +124,18 @@ def import_backup(body: ImportBody):
                 sql = f"INSERT OR REPLACE INTO {table}({names}) VALUES({marks})"
             try:
                 execute(sql, tuple(cols.values()))
-                n += 1
-            except Exception:
-                continue
-        counts[key] = n
+                st['imported'] += 1
+            except Exception as exc:
+                # 类型不符 / 约束冲突等：记下异常类型与首行信息，不再无声吞掉
+                detail = f'{type(exc).__name__}: {str(exc)[:60]}'
+                _skip(f'写入失败：{detail}', row)
     # 恢复后重算学员剩余课时
     for s in query("SELECT id FROM students"):
         recalc_student_remaining(s['id'])
-    return {'ok': True, 'imported': counts}
+    return {
+        'ok': True,
+        'imported': {k: v['imported'] for k, v in stats.items()},
+        'skipped': {k: v['skipped'] for k, v in stats.items()},
+        'skipped_details': {k: {'reasons': v['reasons'], 'samples': v['samples']}
+                            for k, v in stats.items() if v['skipped']},
+    }

@@ -458,15 +458,26 @@ export function importBackup(payload, mode) {
   const TABLE_KEYS = { students: K.students, coaches: K.coaches, lessons: K.lessons,
     lesson_packages: K.packages, checkin_records: K.checkins }
   const imported = {}
+  const skipped = {}
+  const skipped_details = {}
   Object.entries(TABLE_KEYS).forEach(([table, key]) => {
     const rows = Array.isArray(payload[table]) ? payload[table] : []
-    if (!rows.length) { imported[table] = 0; return }
+    const st = { skipped: 0, reasons: {}, samples: [] }
+    const skip = (reason, row) => {
+      st.skipped++
+      st.reasons[reason] = (st.reasons[reason] || 0) + 1
+      if (st.samples.length < 3 && row && typeof row === 'object') {
+        st.samples.push(`${Object.keys(row).slice(0, 3).map(k => `${k}=${row[k]}`).join(',')} → ${reason}`)
+      }
+    }
+    if (!rows.length) { imported[table] = 0; skipped[table] = 0; return }
     const local = read(key)
     const idx = {}
     local.forEach((r, i) => { idx[`${r.id}`] = i })
     let count = 0
     rows.forEach(r => {
-      if (r.id === undefined || r.id === null) return
+      if (!r || typeof r !== 'object') { skip('格式错：不是对象', r); return }
+      if (r.id === undefined || r.id === null) { skip('缺字段：没有主键 id', r); return }
       const tsCol = table === 'checkin_records' ? 'timestamp' : 'updated_at'
       const existIdx = idx[`${r.id}`]
       if (existIdx !== undefined) {
@@ -474,6 +485,7 @@ export function importBackup(payload, mode) {
         const newTs = String(r[tsCol] || '')
         const oldTs = String(exist[tsCol] || '')
         if (newTs && newTs >= oldTs) { local[existIdx] = r; count++ }
+        else { skip('已有更新版本，按 LWW 未覆盖', r) }
       } else {
         local.push(r)
         count++
@@ -484,8 +496,10 @@ export function importBackup(payload, mode) {
     if (maxId > (uni.getStorageSync(K.seq) || 0)) uni.setStorageSync(K.seq, maxId)
     write(key, local)
     imported[table] = count
+    skipped[table] = st.skipped
+    if (st.skipped) skipped_details[table] = { reasons: st.reasons, samples: st.samples }
   })
   // 重建学员剩余课时
   publicList('students').forEach(s => recalcRemaining(s.id))
-  return { ok: true, imported }
+  return { ok: true, imported, skipped, skipped_details }
 }

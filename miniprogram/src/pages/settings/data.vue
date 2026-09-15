@@ -105,8 +105,25 @@ async function importPayload(text) {
     success: async (r) => {
       if (!r.confirm) return
       const res = await backupApi.importData(data)
-      log.value = `导入完成：${Object.entries(res.imported).map(([k, v]) => `${k}:${v}`).join(' ')}`
-      uni.showToast({ title: '恢复成功', icon: 'success' })
+      const imported = Object.entries(res.imported || {}).map(([k, v]) => `${k}:${v}`).join(' ')
+      const skippedTotal = Object.values(res.skipped || {}).reduce((a, b) => a + b, 0)
+      log.value = `导入完成：${imported}`
+      if (skippedTotal) {
+        // 跳过明细必须看得见——「以为全进了」比报错更难查
+        const reasons = Object.entries(res.skipped_details || {}).map(([table, d]) =>
+          `${table} 未导入 ${(res.skipped || {})[table] || 0} 条：` +
+          Object.entries(d.reasons || {}).map(([why, n]) => `${why}×${n}`).join('；') +
+          (d.samples && d.samples.length ? `\n  例：${d.samples.join(' / ')}` : '')
+        ).join('\n')
+        log.value += `\n${reasons}`
+        uni.showModal({
+          title: `有 ${skippedTotal} 条未导入`,
+          content: `${reasons}\n\n明细见本页「最近操作结果」。`,
+          showCancel: false,
+        })
+      } else {
+        uni.showToast({ title: '恢复成功', icon: 'success' })
+      }
     },
   })
 }
@@ -129,5 +146,5 @@ function clearCache() {
 .desc { font-size: 12px; color: #8A94A6; margin: 8px 0 14px; line-height: 1.6; }
 .btn-secondary { border: 1px solid #5B6BF7; color: #5B6BF7; }
 .cell.link .arrow { color: #C0C7D4; font-size: 18px; }
-.log { .log-text { font-size: 12px; color: #5A6478; line-height: 1.8; word-break: break-all; } }
+.log { .log-text { font-size: 12px; color: #5A6478; line-height: 1.8; word-break: break-all; white-space: pre-wrap; } }
 </style>
