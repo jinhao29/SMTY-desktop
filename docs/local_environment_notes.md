@@ -122,6 +122,7 @@ ASCII 之外的中文在日志里可能显示为乱码（控制台编码），�
 |---|---|
 | 沙箱阻断 git 原子替换 | `git commit` / `push` 报 `unable to write new index file` / `couldn't set refs/heads/main` → 命令加**提权**（`dangerouslyDisableSandbox`）。诊断依据：无 `index.lock`、磁盘充足、`.git` 可写，但替换失败 |
 | 查远端真值 | `git ls-remote` 在 HTTPS 下常被 `Recv failure: Connection was reset`；改用 `gh api repos/<owner>/<repo>/git/refs/heads/main --jq '.object.sha'` |
+| **扫描命令的假阴性（09-15 新增，比漏扫更危险）** | `git log -S <串> --all` 遇 docx 等 textconv 失败会**报错退出、输出里混着 `fatal:` 行**——把报错读成"零命中"就是假阴性。漏扫还有机会被补上，**命令失败你连"需要补"都不知道**。**规矩：任何"零命中"结论必须有正向对照**——先用一个**必然命中**的串证明命令本身有效（例：在 SMTY 仓验证时，`10AECS206R001Z5` 已知存在于 `db_encryption_verification.md`，`git grep HEAD` 命中它才说明环境能跑），或直接加 `--no-textconv` 绕开损坏的转换器。**工具失败必须显式报错，不许静默归零** |
 | tracking ref 缺失 | 根仓 `git status -sb` 会显示 `[gone]` 或 `[ahead 64]`（本地 remote-tracking ref 陈旧/缺失，push 其实是成功的）。**以 gh api 的远端 sha 为唯一判据**，别信 status 的 ahead/behind |
 
 ---
