@@ -19,11 +19,12 @@ export const COACH_STATUS = {
   inactive: { label: '离职', type: 'gray' },
 }
 
+// 薪资算法唯一口径在 Android PayoutCalculator（角色决定），小程序不再提供
+// salary_mode 选项、不再自算金额——dividend 已移除（两端口径不同，选了就算错钱）
 export const SALARY_MODE = {
   fixed: '固定薪资',
   per_lesson: '按课时结算',
   base_plus_commission: '底薪+提成',
-  dividend: '分红',
 }
 
 export const LESSON_TYPE = {

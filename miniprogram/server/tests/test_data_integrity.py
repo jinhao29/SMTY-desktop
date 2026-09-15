@@ -19,8 +19,8 @@ def _mk_student(client, headers, name='学员'):
     return r.json()['id']
 
 
-def _mk_coach(client, headers, name='教练'):
-    r = client.post('/api/v1/coaches', json={'name': name}, headers=headers)
+def _mk_coach(client, headers, name='教练', **kw):
+    r = client.post('/api/v1/coaches', json={'name': name, **kw}, headers=headers)
     assert r.status_code == 200, r.text
     return r.json()['id']
 
@@ -326,6 +326,33 @@ def test_checkout_never_flags_overdue(client, auth_headers):
     d = client.post(f'/api/v1/checkout/{lid}', json={'student_ids': [sid]},
                     headers=auth_headers).json()
     assert d['overdue'] == []
+
+
+# =========================================================================
+# 7. 薪资口径降级：小程序不再自算结算金额（防两端数字不一致）
+# =========================================================================
+def test_coach_payout_returns_no_amount(client, auth_headers):
+    """薪资算法唯一口径在 Android PayoutCalculator：小程序只给课时数，不给金额。"""
+    sid = _mk_student(client, auth_headers, '学员甲')
+    cid = _mk_coach(client, auth_headers, '教练甲', role='partner_level1',
+                    salary_mode='dividend', base_salary=3000, lesson_rate=200,
+                    commission_rate=10)
+    lid = _mk_lesson(client, auth_headers, sid, cid)
+    client.post(f'/api/v1/checkin/{lid}', json={'student_ids': [sid]}, headers=auth_headers)
+
+    d = client.get(f'/api/v1/coaches/{cid}/payout', headers=auth_headers).json()
+    assert d['payout'] is None, '不得返回任何计算金额'
+    assert '手机端' in d['payout_note']
+    assert d['total_lessons'] == 1, '课时数仍是安全输出'
+    assert d['signed_lessons'] == 1
+
+
+def test_coach_payout_dividend_legacy_never_computes(client, auth_headers):
+    """历史 salary_mode='dividend'（旧实现会按课时费兜底算钱）同样只返回 None。"""
+    cid = _mk_coach(client, auth_headers, '分红教练', salary_mode='dividend',
+                    lesson_rate=999)
+    d = client.get(f'/api/v1/coaches/{cid}/payout', headers=auth_headers).json()
+    assert d['payout'] is None, 'dividend 残留数据不得算出 999×0 之外的任何金额'
 
 
 def test_mixed_checkin_flags_only_shortfall(client, auth_headers):

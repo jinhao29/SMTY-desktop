@@ -194,17 +194,14 @@ export const coachStore = {
     return { list: rows }
   },
   payout(id) {
+    // 与后端同口径：不返回结算金额（薪资算法唯一口径在 Android PayoutCalculator）
     const coach = this.detail(id)
     if (!coach) return null
     const rows = publicList('lessons').filter(l => l.coach_id === id)
     const signed = rows.filter(l => ['signed_in', 'signed_out'].includes(l.status)).length
-    let payout = 0
-    if (coach.salary_mode === 'fixed') payout = coach.base_salary
-    else if (coach.salary_mode === 'base_plus_commission') {
-      payout = coach.base_salary + signed * coach.lesson_rate * (1 + coach.commission_rate / 100)
-    } else payout = signed * coach.lesson_rate
     return { coach, total_lessons: rows.length, signed_lessons: signed,
-      payout: Math.round(payout * 100) / 100, role_label: ROLE_LABELS[coach.role] || coach.role }
+      payout: null, payout_note: '结算金额请以手机端为准',
+      role_label: ROLE_LABELS[coach.role] || coach.role }
   },
 }
 

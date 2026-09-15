@@ -112,17 +112,19 @@ def coach_schedule(coach_id: int, start: str = Query(''), end: str = Query('')):
 
 @router.get('/{coach_id}/payout')
 def coach_payout(coach_id: int):
-    """课时统计 + 薪资结算：已上课时 × 课时费 + 底薪分摊。"""
+    """课时统计（不返回结算金额）。
+
+    薪资算法的唯一口径在 Android `PayoutCalculator`（角色决定算法，L1=净利润分红、
+    L2=团队提成，依赖机构净利润等小程序端没有的输入）。小程序此前按自己的
+    salary_mode 自算金额，同一教练两端算出的钱可能不一样——这种「看着正常但
+    数不对」比缺功能更糟。小程序是随身查看端：课时数是安全输出，金额不是。
+
+    历史 salary_mode（含 dividend）不再参与任何计算。
+    """
     coach = _fetch(coach_id)
     rows = query("SELECT status FROM lessons WHERE coach_id=?", (coach_id,))
     total_lessons = len(rows)
     signed = sum(1 for r in rows if r['status'] in ('signed_in', 'signed_out'))
-    if coach['salary_mode'] == 'fixed':
-        payout = coach['base_salary']
-    elif coach['salary_mode'] == 'base_plus_commission':
-        payout = coach['base_salary'] + signed * coach['lesson_rate'] * (1 + coach['commission_rate'] / 100)
-    else:  # per_lesson / dividend 兜底按课时费
-        payout = signed * coach['lesson_rate']
     return {'coach': coach, 'total_lessons': total_lessons, 'signed_lessons': signed,
-            'payout': round(payout, 2),
+            'payout': None, 'payout_note': '结算金额请以手机端为准',
             'role_label': ROLE_LABELS.get(coach['role'], coach['role'])}

@@ -19,13 +19,13 @@
       <view class="cell" v-if="c.phone"><view class="cell-label">联系电话</view><view class="cell-value link" @tap="copyPhone">{{ c.phone }}（点按复制）</view></view>
     </view>
 
-    <!-- 课时统计与薪资结算 -->
+    <!-- 课时统计（结算金额以手机端为准：薪资算法在 Android PayoutCalculator，两端口径不同） -->
     <view class="card">
       <view class="section-title">课时统计</view>
       <view class="nums">
         <view class="num-item"><view class="v">{{ payout.total_lessons }}</view><view class="l">累计排课</view></view>
         <view class="num-item"><view class="v">{{ payout.signed_lessons }}</view><view class="l">已上课时</view></view>
-        <view class="num-item"><view class="v" style="color:#5B6BF7">¥{{ payout.payout }}</view><view class="l">应结算薪资</view></view>
+        <view class="num-item"><view class="v">—</view><view class="l">结算金额以手机端为准</view></view>
       </view>
     </view>
 
