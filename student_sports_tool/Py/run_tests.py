@@ -23,8 +23,12 @@ PySide6 的 Qt 事件循环与 pytest 的全局 stdout capture 冲突：
 
 期望基线
 --------
-24 个测试文件，264 passed / 0 failed（test_db_snapshot_scope.py 单独运行收集为 0，属预期）。
+24 个测试文件，265 passed / 0 failed（test_db_snapshot_scope.py 单独运行收集为 0，属预期）。
 基线变更时请同步更新本注释与 EXPECTED_TOTAL。
+
+2026-09-15 变更（小程序互通 age 字段）
+- test_miniprogram_parity.py +1（导出行 age 键/未填 null/无 class_group 断言），
+  基线 264 → 265，EXPECTED_TOTAL 同步。
 
 2026-09-13 批 1 变更（操作摩擦修复）
 ----------------------------------
@@ -100,7 +104,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE) if os.path.basename(HERE) in ('Py', 'py') else HERE
 
 # 期望基线（passed 数）；用于快速判断是否引入回归
-EXPECTED_TOTAL = 264
+EXPECTED_TOTAL = 265
 
 # 有界清理参数；改动前先读模块 docstring「临时目录治理」
 CLEANUP_MAX_AGE_DAYS = 7

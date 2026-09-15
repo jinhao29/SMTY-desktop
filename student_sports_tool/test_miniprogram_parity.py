@@ -25,13 +25,14 @@ LOCAL_STORE_JS = os.path.join(_REPO_ROOT, 'miniprogram', 'src', 'utils',
                               'local-store.js')
 
 # 与 Android MiniprogramImporterTest 共用的 fixture（勿单端改动：字段一一对应）
+# 09-15：class_group(U8/U10/U12) 协议已删除（字段错位），改用与双端同源的数字 age
 FIXTURE_STUDENT = {
     'id': 1,
     'name': '锚定测试学员',
     'phone': '13800000001',
     'parent_phone': '13900000001',
     'grade': '五年级',
-    'class_group': '五年级2班',
+    'age': 10,
     'address': '某小区某栋',
     'status': 'active',
     'expire_date': '2026-12-31',
@@ -108,16 +109,19 @@ def test_export_student_row_field_alignment():
 
 
 def test_import_fixture_roundtrip():
-    """小程序 fixture → 桌面端导入：档案字段 + 剩余课时 + 软删跳过。"""
+    """小程序 fixture → 桌面端导入：档案字段 + 剩余课时 + 软删跳过 + age 语义。"""
     from data_center.miniprogram_bridge import import_miniprogram_backup
     from student_profile import profile_storage
 
     deleted_student = dict(FIXTURE_STUDENT, id=2, name='软删学员', deleted=1)
+    # 未填年龄行：JSON 无 age 键 → 桌面端 0（未填哨兵），不得变形
+    no_age_student = dict(FIXTURE_STUDENT, id=3, name='未填年龄学员')
+    no_age_student.pop('age')
     payload = {
         'export_version': 1,
         'mode': 'shangmen',
         'exported_at': '2026-09-12 10:00:00',
-        'students': [FIXTURE_STUDENT, deleted_student],
+        'students': [FIXTURE_STUDENT, deleted_student, no_age_student],
         'coaches': [],
         'lessons': [],
         'lesson_packages': [],
@@ -129,18 +133,21 @@ def test_import_fixture_roundtrip():
             json.dump(payload, f, ensure_ascii=False)
 
         result = import_miniprogram_backup(src, tmp)
-        assert result['created'] == 1
+        assert result['created'] == 2
         assert result['updated'] == 0
         assert result['skipped_deleted'] == 1
-        assert result['lessons_applied'] == 1
+        assert result['lessons_applied'] == 2, '两个非软删学员各带 remaining=7'
 
-        students = profile_storage.read_all(tmp)
-        assert len(students) == 1
-        stu = students[0]
+        students = {stu['name']: stu for stu in profile_storage.read_all(tmp)}
+        assert len(students) == 2
+        stu = students['锚定测试学员']
         assert stu['name'] == '锚定测试学员'
         assert stu['grade'] == '五年级'
+        assert stu['age'] == 10, 'age 必须随互通落库（本轮修复的核心）'
         # 家长联系方式优先落桌面端"电话"列
         assert stu['phone'] == '13900000001'
+        # 未填年龄：无 age 键 → 桌面端 0（未填哨兵），不是其它垃圾值
+        assert students['未填年龄学员']['age'] == 0
 
         # 剩余课时反算：无明细 → total = remaining
         from lesson_manager import get_summary
@@ -149,7 +156,26 @@ def test_import_fixture_roundtrip():
 
         # 幂等：重复导入变为更新
         result2 = import_miniprogram_backup(src, tmp)
-        assert result2['created'] == 0 and result2['updated'] == 1
+        assert result2['created'] == 0 and result2['updated'] == 2
+
+
+def test_export_student_row_includes_age():
+    """桌面端导出的学生行带 age 键；未填(0) → JSON null，不把未填传成真实年龄。"""
+    from data_center.miniprogram_bridge import export_miniprogram_backup
+    from student_profile import profile_storage
+
+    with tempfile.TemporaryDirectory(prefix='mp_age_') as tmp:
+        profile_storage.upsert(tmp, {'name': '十岁学员', 'age': 10})
+        profile_storage.upsert(tmp, {'name': '未填学员'})   # 无 age → 桌面端 0
+        out = os.path.join(tmp, 'backup_shangmen.json')
+        export_miniprogram_backup(tmp, 'shangmen', out)
+        with open(out, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+
+    rows = {r['name']: r for r in payload['students']}
+    assert rows['十岁学员']['age'] == 10
+    assert rows['未填学员']['age'] is None, '未填必须导出为 null，不得把 0 当真实年龄'
+    assert 'class_group' not in rows['十岁学员'], 'class_group 已从协议删除'
 
 
 def test_import_rejects_malformed_payload():

@@ -34,6 +34,18 @@ def _to_ms(date_str: str) -> int:
         return 0
 
 
+def _to_age(raw) -> int:
+    """JSON age → 桌面端口径（0 = 未填）。
+
+    null / 缺失 / 非法 → 0；负数视为未填（0）。数字原样收。
+    """
+    try:
+        age = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return age if age > 0 else 0
+
+
 def load_payload(json_path: str) -> dict:
     """读取并校验小程序备份 JSON 的顶层结构。
 
@@ -80,11 +92,12 @@ def export_miniprogram_backup(dir_path: str, mode: str, output_path: str,
             'phone': stu.get('phone') or '',
             'parent_phone': '',           # 桌面端无家长电话独立字段
             'grade': stu.get('grade') or '',
-            'class_group': '',            # club 模式班级标签，桌面端无
             'address': '',                # 桌面端无地址字段
             'status': 'active' if stu.get('is_active', True) else 'inactive',
             'expire_date': '',
             'note': stu.get('note') or '',
+            # age：与小程序(None=未填)/Android(0=未填) 的互转契约——未填导出 JSON null
+            'age': int(stu['age']) if stu.get('age') else None,
             'remaining_lessons': int(summary.get(name, {}).get('remaining', 0)),
             'created_at': _stamp(),
             'updated_at': _stamp(),
@@ -146,6 +159,9 @@ def import_miniprogram_backup(json_path: str, dir_path: str,
             # 小程序 phone=学员手机、parent_phone=家长联系方式；桌面端只有"电话"一列，
             # 家长联系方式优先（体测场景主要联系家长）
             'phone': str(row.get('parent_phone') or row.get('phone') or ''),
+            # age：小程序/Android 互转契约——JSON null 或缺失 = 未填（桌面端口径为 0），
+            # 不允许把 null 传成 0 以外的垃圾值
+            'age': _to_age(row.get('age')),
             'updated_at_ms': _to_ms(row.get('updated_at')),
         }
         profile_storage.upsert(dir_path, profile)
