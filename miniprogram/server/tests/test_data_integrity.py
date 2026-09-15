@@ -326,3 +326,28 @@ def test_checkout_never_flags_overdue(client, auth_headers):
     d = client.post(f'/api/v1/checkout/{lid}', json={'student_ids': [sid]},
                     headers=auth_headers).json()
     assert d['overdue'] == []
+
+
+def test_mixed_checkin_flags_only_shortfall(client, auth_headers):
+    """同课两学员：有课时的正常扣，没课时的被标记——互不牵连、互不漏报。
+
+    守住 doCheck 循环里 per-student item 的独立性（item 若被提出循环外，
+    一个人的 overdue 会串到所有人的 results 上）。
+    """
+    ok_sid = _mk_student(client, auth_headers, '有包')
+    bad_sid = _mk_student(client, auth_headers, '无包')
+    cid = _mk_coach(client, auth_headers)
+    pid = _mk_package(client, auth_headers, ok_sid, total=5, price=500)
+    r = client.post('/api/v1/lessons', json={
+        'student_ids': [ok_sid, bad_sid], 'coach_id': cid, 'date': '2026-09-24',
+        'start_time': '10:00', 'end_time': '11:00'}, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    lid = r.json()['id']
+
+    d = client.post(f'/api/v1/checkin/{lid}',
+                    json={'student_ids': [ok_sid, bad_sid]},
+                    headers=auth_headers).json()
+    assert [x['ok'] for x in d['results']] == [True, True], '两个都要签到成功'
+    assert d['overdue'] == [{'student_id': bad_sid, 'reason': 'no_package'}], \
+        '只标记真正没扣到课时的那个，不牵连正常学员'
+    assert _pkg(client, auth_headers, pid)['remaining_lessons'] == 4, '有课时的必须正常扣'
