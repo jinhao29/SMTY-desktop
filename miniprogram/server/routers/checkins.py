@@ -20,20 +20,30 @@ class CheckinBody(BaseModel):
     note: str = ''
 
 
-def _deduct_lesson(student_id: int):
-    """按最早到期优先扣课时；扣完的包标记 exhausted。"""
+def _deduct_lesson(student_id: int) -> str:
+    """按最早到期优先扣课时；扣完的包标记 exhausted。
+
+    返回扣课结果，供调用方明确回报「这次签到到底扣没扣到课时」：
+      'deducted'          已扣减一节
+      'no_package'        该学员一张课时包都没有
+      'no_active_package' 有课时包，但没有能扣的（已过期 / 已耗尽）
+    不阻断签到（现场不能让学员白上课），但绝不静默——三种结果都要让教练看见。
+    """
     pkgs = query("SELECT * FROM lesson_packages WHERE student_id=? AND deleted=0 "
                  "AND status='active' AND remaining_lessons>0 "
                  "ORDER BY (expire_date='') ASC, expire_date ASC, id ASC",
                  (student_id,))
     if not pkgs:
-        return
+        had = query_one("SELECT id FROM lesson_packages WHERE student_id=? AND deleted=0 LIMIT 1",
+                        (student_id,))
+        return 'no_active_package' if had else 'no_package'
     pkg = pkgs[0]
     remaining = pkg['remaining_lessons'] - 1
     status = 'exhausted' if remaining <= 0 else 'active'
     execute("UPDATE lesson_packages SET remaining_lessons=?, status=?, updated_at=? WHERE id=?",
             (max(remaining, 0), status, now_str(), pkg['id']))
     recalc_student_remaining(student_id)
+    return 'deducted'
 
 
 def _do_check(lesson_id: int, body: CheckinBody, check_type: str):
@@ -42,6 +52,7 @@ def _do_check(lesson_id: int, body: CheckinBody, check_type: str):
         raise HTTPException(status_code=404, detail='排课不存在')
     valid_ids = set(lesson.get('student_ids') or [])
     results = []
+    overdue = []
     ts = now_str()
     for sid in body.student_ids:
         if valid_ids and sid not in valid_ids:
@@ -54,15 +65,21 @@ def _do_check(lesson_id: int, body: CheckinBody, check_type: str):
             continue
         execute("INSERT INTO checkin_records(student_id,lesson_id,type,timestamp,note) "
                 "VALUES(?,?,?,?,?)", (sid, lesson_id, check_type, ts, body.note))
+        item = {'student_id': sid, 'ok': True}
         if check_type == 'check_in':
-            _deduct_lesson(sid)
-        results.append({'student_id': sid, 'ok': True})
+            deduct = _deduct_lesson(sid)
+            if deduct != 'deducted':
+                item['overdue'] = True
+                item['overdue_reason'] = deduct
+                overdue.append({'student_id': sid, 'reason': deduct})
+        results.append(item)
     if body.student_ids and all(r['ok'] for r in results):
         new_status = 'signed_in' if check_type == 'check_in' else 'signed_out'
         execute("UPDATE lessons SET status=?, updated_at=? WHERE id=?",
                 (new_status, ts, lesson_id))
     return {'results': results, 'lesson_status': query_one(
-        "SELECT status FROM lessons WHERE id=?", (lesson_id,))['status']}
+        "SELECT status FROM lessons WHERE id=?", (lesson_id,))['status'],
+        'overdue': overdue}
 
 
 @router.post('/checkin/{lesson_id}')

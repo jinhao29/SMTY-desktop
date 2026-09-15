@@ -270,25 +270,34 @@ export const lessonStore = {
 
 // ---------------- checkins ----------------
 
+/**
+ * 按最早到期优先扣课时，返回扣课结果（与后端 _deduct_lesson 同口径）：
+ * 'deducted' 已扣 / 'no_package' 一张包都没有 / 'no_active_package' 有包但都用不了（过期/耗尽）
+ */
 function deductLesson(studentId) {
   const rows = read(K.packages)
     .filter(p => p.student_id === studentId && !p.deleted && p.status === 'active' && p.remaining_lessons > 0)
     .sort((a, b) => (a.expire_date || '9999').localeCompare(b.expire_date || '9999') || a.id - b.id)
-  if (!rows.length) return
+  if (!rows.length) {
+    const had = read(K.packages).some(p => p.student_id === studentId && !p.deleted)
+    return had ? 'no_active_package' : 'no_package'
+  }
   const pkg = rows[0]
   const remaining = pkg.remaining_lessons - 1
   write(K.packages, read(K.packages).map(p => (p.id === pkg.id
     ? { ...p, remaining_lessons: Math.max(remaining, 0), status: remaining <= 0 ? 'exhausted' : 'active', updated_at: stamp() }
     : p)))
   recalcRemaining(studentId)
+  return 'deducted'
 }
 
 function doCheck(lessonId, studentIds, checkType, note = '') {
   const lesson = publicList('lessons').find(l => l.id === lessonId)
-  if (!lesson) return { results: [{ ok: false, reason: '排课不存在' }], lesson_status: 'pending' }
+  if (!lesson) return { results: [{ ok: false, reason: '排课不存在' }], lesson_status: 'pending', overdue: [] }
   const valid = new Set(lesson.student_ids || [])
   const records = read(K.checkins)
   const results = []
+  const overdue = []
   const ts = stamp()
   let allOk = studentIds.length > 0
   studentIds.forEach(sid => {
@@ -304,8 +313,16 @@ function doCheck(lessonId, studentIds, checkType, note = '') {
       return
     }
     records.push({ id: nextId(), student_id: sid, lesson_id: lessonId, type: checkType, timestamp: ts, note })
-    results.push({ student_id: sid, ok: true })
-    if (checkType === 'check_in') deductLesson(sid)
+    const item = { student_id: sid, ok: true }
+    if (checkType === 'check_in') {
+      const deduct = deductLesson(sid)
+      if (deduct !== 'deducted') {
+        item.overdue = true
+        item.overdue_reason = deduct
+        overdue.push({ student_id: sid, reason: deduct })
+      }
+    }
+    results.push(item)
   })
   write(K.checkins, records)
   if (allOk) {
@@ -313,7 +330,7 @@ function doCheck(lessonId, studentIds, checkType, note = '') {
     write(K.lessons, read(K.lessons).map(l => (l.id === lessonId ? { ...l, status, updated_at: ts } : l)))
   }
   const updated = read(K.lessons).find(l => l.id === lessonId)
-  return { results, lesson_status: updated ? updated.status : 'pending' }
+  return { results, lesson_status: updated ? updated.status : 'pending', overdue }
 }
 
 export const checkinStore = {

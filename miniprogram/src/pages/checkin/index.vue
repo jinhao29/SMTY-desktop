@@ -63,9 +63,25 @@ async function load() {
   pendingList.value = p.list
 }
 
+/** 超额签到必须明确回报（与后端 overdue 字段对齐）——课时没扣掉，就不能只说「已签到」 */
+function reportOverdue(res, lesson) {
+  const list = (res && res.overdue) || []
+  if (!list.length) return false
+  const names = list.map(o => (lesson.students || []).find(s => s.id === o.student_id)?.name || `#${o.student_id}`)
+  const noPkg = list.every(o => o.reason === 'no_package')
+  uni.showModal({
+    title: '课时不足',
+    content: `${names.join('、')}：签到已记录，但本次没有扣减课时（${noPkg ? '还没有任何课时包' : '课时包已过期或已耗尽'}）。请及时加课或补录。`,
+    showCancel: false,
+  })
+  return true
+}
+
 async function doCheckin(lesson, stu) {
-  await checkinApi.checkin(lesson.id, [stu.id])
-  uni.showToast({ title: `${stu.name} 已签到`, icon: 'success' })
+  const res = await checkinApi.checkin(lesson.id, [stu.id])
+  if (!reportOverdue(res, lesson)) {
+    uni.showToast({ title: `${stu.name} 已签到`, icon: 'success' })
+  }
   load()
 }
 
@@ -78,8 +94,10 @@ async function doCheckout(lesson, stu) {
 async function batchCheckin(lesson) {
   const ids = lesson.students.filter(s => !s.checked_in).map(s => s.id)
   if (!ids.length) return uni.showToast({ title: '已全部签到', icon: 'none' })
-  await checkinApi.checkin(lesson.id, ids)
-  uni.showToast({ title: '批量签到完成', icon: 'success' })
+  const res = await checkinApi.checkin(lesson.id, ids)
+  if (!reportOverdue(res, lesson)) {
+    uni.showToast({ title: '批量签到完成', icon: 'success' })
+  }
   load()
 }
 

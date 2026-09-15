@@ -25,10 +25,10 @@ def _mk_coach(client, headers, name='教练'):
     return r.json()['id']
 
 
-def _mk_package(client, headers, sid, total=20, price=2000, paid=-1):
+def _mk_package(client, headers, sid, total=20, price=2000, paid=-1, **kw):
     r = client.post('/api/v1/packages', json={
         'student_id': sid, 'name': '课时包', 'total_lessons': total,
-        'price': price, 'paid_amount': paid}, headers=headers)
+        'price': price, 'paid_amount': paid, **kw}, headers=headers)
     assert r.status_code == 200, r.text
     return r.json()['id']
 
@@ -257,3 +257,72 @@ def test_import_rejection_leaves_no_partial_write(client, auth_headers):
     assert r.status_code == 400
     assert client.get('/api/v1/students', headers=auth_headers).json()['total'] == 0, \
         '被拒的导入不得留下前半份数据'
+
+
+# =========================================================================
+# 5. 超课时签到：允许签到，但必须明确回报（P2：不能静默不扣课）
+# =========================================================================
+def test_checkin_without_package_is_allowed_but_flagged(client, auth_headers):
+    """一张课时包都没有 → 签到仍成功（现场不能白上课），但 overdue 必须回报。"""
+    sid = _mk_student(client, auth_headers, '无包学员')
+    cid = _mk_coach(client, auth_headers)
+    lid = _mk_lesson(client, auth_headers, sid, cid)
+
+    d = client.post(f'/api/v1/checkin/{lid}', json={'student_ids': [sid]},
+                    headers=auth_headers).json()
+    assert d['results'][0]['ok'] is True, '不得阻断现场签到'
+    assert d['overdue'] == [{'student_id': sid, 'reason': 'no_package'}]
+    assert _student(client, auth_headers, sid)['remaining_lessons'] == 0, '不得扣成负数'
+
+
+def test_checkin_over_quota_is_flagged_not_negative(client, auth_headers):
+    """1 课时包连签两节：第二次标记超额，课时保持 0 不为负。"""
+    sid = _mk_student(client, auth_headers, '剩1课时')
+    cid = _mk_coach(client, auth_headers)
+    pid = _mk_package(client, auth_headers, sid, total=1, price=100)
+    l1 = _mk_lesson(client, auth_headers, sid, cid, date='2026-09-21')
+    l2 = _mk_lesson(client, auth_headers, sid, cid, date='2026-09-22')
+
+    d1 = client.post(f'/api/v1/checkin/{l1}', json={'student_ids': [sid]},
+                     headers=auth_headers).json()
+    assert d1['overdue'] == [], '正常扣课不应报超额'
+    assert _pkg(client, auth_headers, pid)['remaining_lessons'] == 0
+
+    d2 = client.post(f'/api/v1/checkin/{l2}', json={'student_ids': [sid]},
+                     headers=auth_headers).json()
+    assert d2['results'][0]['ok'] is True
+    assert d2['overdue'] == [{'student_id': sid, 'reason': 'no_active_package'}], \
+        '已耗尽的包也算「没有可扣的课时」，必须回报'
+    assert _pkg(client, auth_headers, pid)['remaining_lessons'] == 0, '不得扣成负数'
+    assert _student(client, auth_headers, sid)['remaining_lessons'] == 0
+    assert len(client.get(f'/api/v1/checkins?student_id={sid}',
+                          headers=auth_headers).json()['list']) == 2, '两节课都要留痕'
+
+
+def test_expired_package_checkin_is_flagged(client, auth_headers):
+    """过期包有余量但不可扣 → 签到成功且余量不动，同时明确回报。"""
+    sid = _mk_student(client, auth_headers, '过期包学员')
+    cid = _mk_coach(client, auth_headers)
+    pid = _mk_package(client, auth_headers, sid, total=10, price=1000,
+                      expire_date='2026-01-01')
+    client.get('/api/v1/packages', headers=auth_headers)  # 触发过期状态刷新
+    assert _pkg(client, auth_headers, pid)['status'] == 'expired'
+
+    lid = _mk_lesson(client, auth_headers, sid, cid, date='2026-09-23')
+    d = client.post(f'/api/v1/checkin/{lid}', json={'student_ids': [sid]},
+                    headers=auth_headers).json()
+    assert d['overdue'] == [{'student_id': sid, 'reason': 'no_active_package'}], \
+        '过期包不可扣，教练必须看得见'
+    assert _pkg(client, auth_headers, pid)['remaining_lessons'] == 10, '过期包余量不应被动'
+
+
+def test_checkout_never_flags_overdue(client, auth_headers):
+    """签退不涉及扣课，不得报超额（否则天天误报）。"""
+    sid = _mk_student(client, auth_headers, '甲')
+    cid = _mk_coach(client, auth_headers)
+    lid = _mk_lesson(client, auth_headers, sid, cid)
+    client.post(f'/api/v1/checkin/{lid}', json={'student_ids': [sid]}, headers=auth_headers)
+
+    d = client.post(f'/api/v1/checkout/{lid}', json={'student_ids': [sid]},
+                    headers=auth_headers).json()
+    assert d['overdue'] == []
