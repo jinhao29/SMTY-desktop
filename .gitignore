@@ -107,3 +107,7 @@ _device_archive/
 # 教练页真机验证截图与一次性诊断脚本（2026-09-14）
 _ui_coach/
 student_sports_tool/_diag_*.py
+# 编辑器配置与一次性验证产物（2026-09-15）
+#   student_sports_tool/_*.png：该目录下已确认**零个**已跟踪的 _*.png，故用通用规则
+.vscode/
+student_sports_tool/_*.png
