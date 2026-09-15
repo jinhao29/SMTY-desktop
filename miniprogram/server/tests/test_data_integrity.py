@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """数据完整性回归用例。
 
-固化 2026-09-14 全面审查发现的三类**静默数据损坏**：
+固化 2026-09-14 全面审查发现的**静默数据损坏**：
 - 编辑课时包重置剩余课时（改名/改价/改有效期都会触发）
 - 课时包转移学员时旧学员汇总不重算
-（备注丢失、导入列名注入见后续追加小节）
+- 学员备注只进本机不进库（服务器模式填了等于没填）
+- 备份导入的列名来自请求 JSON（注入面）
 
 这些 bug 的共同特征是「界面显示成功、数据已经不对、无提示无异常」——
-因此每条都断言**具体数字**，不靠界面反馈。
+因此每条都断言**具体数字或具体值**，不靠界面反馈。
 """
 import pytest
 
@@ -158,3 +159,55 @@ def test_transfer_keeps_consumed_lessons(client, auth_headers):
 
     assert _student(client, auth_headers, b)['remaining_lessons'] == 19
     assert _student(client, auth_headers, a)['remaining_lessons'] == 0
+
+
+# =========================================================================
+# 3. 学员备注：服务器模式必须真存下来（P1-②）
+# =========================================================================
+def test_student_note_persists(client, auth_headers):
+    """建号时写的备注能回读，改号时改的备注也能回读。"""
+    note = '暑期班，家长要求 18:00 前结束'
+    r = client.post('/api/v1/students', json={'name': '小明', 'note': note}, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    sid = r.json()['id']
+    assert _student(client, auth_headers, sid)['note'] == note, '新建时备注丢失'
+
+    client.put(f'/api/v1/students/{sid}',
+               json={'name': '小明', 'note': '已结课'}, headers=auth_headers)
+    assert _student(client, auth_headers, sid)['note'] == '已结课', '编辑时备注丢失'
+
+
+def test_student_note_defaults_empty(client, auth_headers):
+    """不传备注时存空串，不是 None（前端 v-model 直接绑）"""
+    sid = _mk_student(client, auth_headers, '无备注学员')
+    assert _student(client, auth_headers, sid)['note'] == ''
+
+
+def test_legacy_db_migration_adds_note(tmp_path):
+    """老库（students 无 note 列）升级：补列、旧数据保留、重复执行不报错。"""
+    import sqlite3
+
+    import database
+
+    conn = sqlite3.connect(str(tmp_path / 'legacy.db'))
+    conn.executescript("""
+        CREATE TABLE students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+            phone TEXT DEFAULT '', grade TEXT DEFAULT '', parent_phone TEXT DEFAULT '',
+            address TEXT DEFAULT '', class_group TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active', remaining_lessons INTEGER NOT NULL DEFAULT 0,
+            expire_date TEXT DEFAULT '', created_at TEXT, updated_at TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0);
+        INSERT INTO students(name) VALUES('老学员');
+    """)
+    conn.commit()
+
+    database._migrate(conn)
+    cols = {r[1] for r in conn.execute('PRAGMA table_info(students)')}
+    assert 'note' in cols, '迁移未补 note 列'
+    row = conn.execute('SELECT name, note FROM students').fetchone()
+    assert row[0] == '老学员', '迁移不得动既有数据'
+    assert row[1] == '', '既有行补列后应为空串'
+
+    database._migrate(conn)  # 幂等：第二次不得抛 duplicate column
+    conn.close()

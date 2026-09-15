@@ -22,6 +22,7 @@ class StudentBody(BaseModel):
     class_group: str = ''
     status: str = 'active'
     expire_date: str = ''
+    note: str = ''
 
 
 def _fetch(student_id: int):
@@ -66,9 +67,9 @@ def create_student(body: StudentBody):
         raise HTTPException(status_code=400, detail='姓名不能为空')
     sid = execute(
         "INSERT INTO students(name,phone,grade,parent_phone,address,class_group,status,"
-        "remaining_lessons,expire_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "remaining_lessons,expire_date,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (body.name.strip(), body.phone, body.grade, body.parent_phone, body.address,
-         body.class_group, body.status, 0, body.expire_date, now_str(), now_str()))
+         body.class_group, body.status, 0, body.expire_date, body.note, now_str(), now_str()))
     return {'id': sid}
 
 
@@ -77,9 +78,9 @@ def update_student(student_id: int, body: StudentBody):
     _fetch(student_id)
     execute(
         "UPDATE students SET name=?,phone=?,grade=?,parent_phone=?,address=?,class_group=?,"
-        "status=?,expire_date=?,updated_at=? WHERE id=?",
+        "status=?,expire_date=?,note=?,updated_at=? WHERE id=?",
         (body.name.strip(), body.phone, body.grade, body.parent_phone, body.address,
-         body.class_group, body.status, body.expire_date, now_str(), student_id))
+         body.class_group, body.status, body.expire_date, body.note, now_str(), student_id))
     return {'ok': True}
 
 

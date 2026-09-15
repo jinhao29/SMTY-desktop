@@ -74,14 +74,26 @@ def get_conn_for_mode(mode: str) -> sqlite3.Connection:
         _mode_ctx.reset(token)
 
 
+def _migrate(conn):
+    """幂等补列迁移：老库（建表语句里没有该列）走 ALTER，新库由 SCHEMA 直接建出。
+
+    SQLite 的 ADD COLUMN 重复执行会报 duplicate column name，
+    故先查 PRAGMA table_info。列一律追加在末尾，与新建库的列序保持一致。
+    """
+    students_cols = {r[1] for r in conn.execute('PRAGMA table_info(students)')}
+    if 'note' not in students_cols:
+        conn.execute("ALTER TABLE students ADD COLUMN note TEXT DEFAULT ''")
+
+
 def _ensure_schema(conn):
-    """幂等建表 + 管理员账号播种（每个模式库独立初始化）。
+    """幂等建表 + 补列迁移 + 管理员账号播种（每个模式库独立初始化）。
 
     不再播种 13800000000/123456 这类公开默认口令——源码可见即等于没有密码。
     管理员账号只在显式提供 MP_ADMIN_PHONE + MP_ADMIN_PASSWORD 时创建；
     两者缺失则库内无任何账号，需先配置环境变量再启动。
     """
     conn.executescript(SCHEMA)
+    _migrate(conn)
     phone = (os.environ.get('MP_ADMIN_PHONE') or '').strip()
     password = os.environ.get('MP_ADMIN_PASSWORD') or ''
     if not phone or not password:
@@ -120,7 +132,8 @@ CREATE TABLE IF NOT EXISTS students (
     remaining_lessons INTEGER NOT NULL DEFAULT 0,
     expire_date TEXT DEFAULT '',
     created_at TEXT, updated_at TEXT,
-    deleted INTEGER NOT NULL DEFAULT 0
+    deleted INTEGER NOT NULL DEFAULT 0,
+    note TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS coaches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

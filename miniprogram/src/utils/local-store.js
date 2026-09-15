@@ -119,7 +119,8 @@ export const studentStore = {
   create(data) {
     const rows = read(K.students)
     const id = nextId()
-    rows.push({ id, remaining_lessons: 0, status: 'active', ...data, created_at: stamp(), updated_at: stamp(), deleted: 0 })
+    rows.push({ id, remaining_lessons: 0, status: 'active', note: '', ...data,
+      created_at: stamp(), updated_at: stamp(), deleted: 0 })
     write(K.students, rows)
     return { id }
   },
