@@ -11,7 +11,13 @@
       </view>
       <view class="form-item">
         <text class="form-label">年级</text>
-        <input class="form-input" v-model="form.grade" placeholder="如：三年级 / 初一" />
+        <picker :range="gradeOptions" @change="(e) => form.grade = gradeOptions[e.detail.value]">
+          <view class="form-input picker">{{ form.grade || '请选择年级' }}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">年龄</text>
+        <input class="form-input" type="number" v-model="form.age" placeholder="选填，如 8" />
       </view>
       <view class="form-item">
         <text class="form-label">家长联系方式</text>
@@ -20,13 +26,6 @@
       <view class="form-item">
         <text class="form-label">{{ isClub ? '上课场馆' : '小区地址' }}</text>
         <input class="form-input" v-model="form.address" :placeholder="isClub ? '如：大学城体育中心' : '如：某小区某栋'" />
-      </view>
-      <view v-if="isClub" class="form-item">
-        <text class="form-label">班级</text>
-        <view class="chips">
-          <view v-for="g in CLASS_GROUPS" :key="g" class="chip"
-                :class="{ active: form.class_group === g }" @tap="form.class_group = g">{{ g }}</view>
-        </view>
       </view>
       <view class="form-item">
         <text class="form-label">状态</text>
@@ -49,7 +48,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { studentApi } from '../../api'
-import { STUDENT_STATUS, CLASS_GROUPS } from '../../utils/constants'
+import { STUDENT_STATUS, GRADE_OPTIONS } from '../../utils/constants'
 import { required, checkPhone } from '../../utils/validator'
 import { useModeStore } from '../../stores/mode'
 
@@ -60,16 +59,25 @@ const saving = ref(false)
 
 // 学员级「课时到期日」已作废：到期日在课时包上（双端互通时该字段被丢弃），
 // 学员表单不再提供，form 不含 expire_date（回填对象里的同名键提交后会被服务端忽略）
+// class_group(U8/U10/U12) 已删——那是年龄的字段错位，现为数字 age（与双端同源）
 const form = reactive({
   name: '', phone: '', grade: '', parent_phone: '',
-  address: '', class_group: '', status: 'active', note: '',
+  address: '', status: 'active', age: '', note: '',
 })
+
+const gradeOptions = GRADE_OPTIONS
 
 async function save() {
   if (saving.value) return
   if (!required(form.name, '姓名')) return
   if (!checkPhone(form.phone)) return
   if (!checkPhone(form.parent_phone, '家长手机号')) return
+  if (form.age !== '' && form.age !== null && form.age !== undefined) {
+    if (!checkNumber(form.age, '年龄', 3)) return
+    form.age = Number(form.age)
+  } else {
+    form.age = null
+  }
   saving.value = true
   try {
     if (id.value) await studentApi.update(id.value, form)

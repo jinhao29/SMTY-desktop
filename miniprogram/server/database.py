@@ -75,14 +75,25 @@ def get_conn_for_mode(mode: str) -> sqlite3.Connection:
 
 
 def _migrate(conn):
-    """幂等补列迁移：老库（建表语句里没有该列）走 ALTER，新库由 SCHEMA 直接建出。
+    """幂等迁移：补列 / 改字段结构（老库与新建库最终列序一致，列一律追加末尾）。
 
-    SQLite 的 ADD COLUMN 重复执行会报 duplicate column name，
-    故先查 PRAGMA table_info。列一律追加在末尾，与新建库的列序保持一致。
+    - note：学员备注（09-15 补）
+    - class_group → age：U8/U10/U12 实际用途是填年龄，双端（Android Student.age /
+      PC age spinbox）都是数字，枚举互通时被丢弃——字段错位修正。迁移映射
+      U8→8、U10→10、U12→12（仅当 age 尚未填），随后删除 class_group 列。
     """
-    students_cols = {r[1] for r in conn.execute('PRAGMA table_info(students)')}
-    if 'note' not in students_cols:
+    cols = {r[1] for r in conn.execute('PRAGMA table_info(students)')}
+    if 'note' not in cols:
         conn.execute("ALTER TABLE students ADD COLUMN note TEXT DEFAULT ''")
+    if 'age' not in cols:
+        conn.execute("ALTER TABLE students ADD COLUMN age INTEGER")
+    if 'class_group' in cols:
+        # 数据迁移必须在删列之前；age IS NULL 保证幂等（重复执行不再覆盖）
+        conn.execute(
+            "UPDATE students SET age = CASE class_group "
+            "WHEN 'U8' THEN 8 WHEN 'U10' THEN 10 WHEN 'U12' THEN 12 ELSE age END "
+            "WHERE age IS NULL")
+        conn.execute("ALTER TABLE students DROP COLUMN class_group")
 
 
 def _ensure_schema(conn):
@@ -127,13 +138,13 @@ CREATE TABLE IF NOT EXISTS students (
     grade TEXT DEFAULT '',
     parent_phone TEXT DEFAULT '',
     address TEXT DEFAULT '',
-    class_group TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
     remaining_lessons INTEGER NOT NULL DEFAULT 0,
     expire_date TEXT DEFAULT '',
     created_at TEXT, updated_at TEXT,
     deleted INTEGER NOT NULL DEFAULT 0,
-    note TEXT DEFAULT ''
+    note TEXT DEFAULT '',
+    age INTEGER
 );
 CREATE TABLE IF NOT EXISTS coaches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

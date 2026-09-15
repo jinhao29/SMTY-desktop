@@ -215,12 +215,67 @@ def test_legacy_db_migration_adds_note(tmp_path):
     database._migrate(conn)
     cols = {r[1] for r in conn.execute('PRAGMA table_info(students)')}
     assert 'note' in cols, '迁移未补 note 列'
+    assert 'class_group' not in cols, '老库的 class_group 应随迁移删除'
     row = conn.execute('SELECT name, note FROM students').fetchone()
     assert row[0] == '老学员', '迁移不得动既有数据'
     assert row[1] == '', '既有行补列后应为空串'
 
     database._migrate(conn)  # 幂等：第二次不得抛 duplicate column
     conn.close()
+
+
+def test_legacy_migration_class_group_becomes_age(tmp_path):
+    """字段错位修正：U8/U10/U12 → 数字 age（与双端同源），class_group 列删除，幂等。"""
+    import sqlite3
+
+    import database
+
+    conn = sqlite3.connect(str(tmp_path / 'legacy2.db'))
+    conn.executescript("""
+        CREATE TABLE students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+            phone TEXT DEFAULT '', grade TEXT DEFAULT '', parent_phone TEXT DEFAULT '',
+            address TEXT DEFAULT '', class_group TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active', remaining_lessons INTEGER NOT NULL DEFAULT 0,
+            expire_date TEXT DEFAULT '', created_at TEXT, updated_at TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0, note TEXT DEFAULT '');
+        INSERT INTO students(name, class_group) VALUES('U10学员', 'U10');
+        INSERT INTO students(name, class_group) VALUES('怪值学员', 'U99');
+        INSERT INTO students(name) VALUES('无班级学员');
+    """)
+    conn.commit()
+
+    database._migrate(conn)
+    cols = {r[1] for r in conn.execute('PRAGMA table_info(students)')}
+    assert 'class_group' not in cols, 'class_group 列应被删除'
+    assert 'age' in cols, '迁移未补 age 列'
+    ages = {r[0]: r[1] for r in conn.execute('SELECT name, age FROM students')}
+    assert ages['U10学员'] == 10, 'U10 应映射为数字 10'
+    assert ages['怪值学员'] is None, '无法映射的值按拍板作废（不猜数字）'
+    assert ages['无班级学员'] is None
+
+    database._migrate(conn)  # 幂等：重复执行列集合不变、数据不变
+    assert {r[1] for r in conn.execute('PRAGMA table_info(students)')} == cols
+    conn.close()
+
+
+def test_student_age_roundtrip(client, auth_headers):
+    """数字年龄与双端同源：能存能读能改；class_group 不再存在。"""
+    r = client.post('/api/v1/students', json={'name': '小八', 'age': 8}, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    sid = r.json()['id']
+    assert _student(client, auth_headers, sid)['age'] == 8
+
+    client.put(f'/api/v1/students/{sid}', json={'name': '小九', 'age': 9}, headers=auth_headers)
+    s = _student(client, auth_headers, sid)
+    assert s['age'] == 9
+    assert 'class_group' not in s, 'class_group 字段应已消失'
+
+
+def test_student_age_absent_means_null(client, auth_headers):
+    """不传年龄存 NULL（不是 0——0 在 Android 是未填哨兵，语义不同）。"""
+    sid = _mk_student(client, auth_headers, '无年龄')
+    assert _student(client, auth_headers, sid)['age'] is None
 
 
 # =========================================================================

@@ -39,7 +39,16 @@ export const LESSON_STATUS = {
   signed_out: { label: '已签退', type: 'default' },
 }
 
-export const CLASS_GROUPS = ['U8', 'U10', 'U12']
+// 年级选项：与 Android Standards.GRADE_OPTIONS 同源（编码 0-13，13=中考）。
+// 小程序存中文标签，Android 导入端 gradeCodeFromLabel 可反向识别。
+export const GRADE_OPTIONS = [
+  '学龄前(3-7岁)',
+  '小学一年级', '小学二年级', '小学三年级',
+  '小学四年级', '小学五年级', '小学六年级',
+  '初一', '初二', '初三',
+  '高一', '高二', '高三',
+  '中考',
+]
 
 export const PACKAGE_STATUS = {
   active: { label: '生效中', type: 'success' },

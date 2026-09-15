@@ -19,10 +19,12 @@ class StudentBody(BaseModel):
     grade: str = ''
     parent_phone: str = ''
     address: str = ''
-    class_group: str = ''
     status: str = 'active'
     # 学员级 expire_date 已作废（到期日在课时包上，双端互通时该字段被丢弃）：
     # 不再出现在请求模型与写入语句里，DB 旧列与旧值保留但从此不再被更新
+    # age：与双端同源的数字年龄（Android Student.age / PC age spinbox），
+    # class_group(U8/U10/U12) 是字段错位，已删除并迁移
+    age: Optional[int] = None
     note: str = ''
 
 
@@ -37,7 +39,6 @@ def _fetch(student_id: int):
 def list_students(
     keyword: str = Query('', description='姓名/手机号搜索'),
     status: str = Query(''),
-    class_group: str = Query(''),
     page: int = 1, page_size: int = 50,
 ):
     where, params = ['deleted=0'], []
@@ -47,9 +48,6 @@ def list_students(
     if status:
         where.append('status=?')
         params.append(status)
-    if class_group:
-        where.append('class_group=?')
-        params.append(class_group)
     cond = ' AND '.join(where)
     total = query_one(f"SELECT COUNT(*) AS c FROM students WHERE {cond}", params)['c']
     rows = query(f"SELECT * FROM students WHERE {cond} ORDER BY id DESC LIMIT ? OFFSET ?",
@@ -67,10 +65,10 @@ def create_student(body: StudentBody):
     if not body.name.strip():
         raise HTTPException(status_code=400, detail='姓名不能为空')
     sid = execute(
-        "INSERT INTO students(name,phone,grade,parent_phone,address,class_group,status,"
-        "remaining_lessons,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO students(name,phone,grade,parent_phone,address,status,"
+        "remaining_lessons,age,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (body.name.strip(), body.phone, body.grade, body.parent_phone, body.address,
-         body.class_group, body.status, 0, body.note, now_str(), now_str()))
+         body.status, 0, body.age, body.note, now_str(), now_str()))
     return {'id': sid}
 
 
@@ -79,10 +77,10 @@ def update_student(student_id: int, body: StudentBody):
     _fetch(student_id)
     # expire_date 不在 SET 里：学员级到期日已作废，旧值原样保留、不再被更新
     execute(
-        "UPDATE students SET name=?,phone=?,grade=?,parent_phone=?,address=?,class_group=?,"
-        "status=?,note=?,updated_at=? WHERE id=?",
+        "UPDATE students SET name=?,phone=?,grade=?,parent_phone=?,address=?,"
+        "status=?,age=?,note=?,updated_at=? WHERE id=?",
         (body.name.strip(), body.phone, body.grade, body.parent_phone, body.address,
-         body.class_group, body.status, body.note, now_str(), student_id))
+         body.status, body.age, body.note, now_str(), student_id))
     return {'ok': True}
 
 

@@ -5,7 +5,7 @@
       <view class="row-1">
         <text class="name">{{ student.name }}</text>
         <text class="tag" :class="'tag-' + statusInfo.type">{{ statusInfo.label }}</text>
-        <text v-if="student.class_group" class="tag">{{ student.class_group }}</text>
+        <text v-if="student.age" class="tag">{{ student.age }}岁</text>
       </view>
       <view class="row-2">
         <text>{{ student.grade || '未填年级' }}</text>

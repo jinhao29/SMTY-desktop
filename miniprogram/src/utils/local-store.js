@@ -27,6 +27,24 @@ const read = (key, fallback = []) => {
 }
 const write = (key, arr) => uni.setStorageSync(key, arr)
 
+// 一次性迁移（幂等）：class_group(U8/U10/U12) → age——字段错位修正，与三端
+// 互通契约对齐（双端都是数字年龄）。无 class_group 键则 no-op，重复执行无损。
+;(() => {
+  const map = { U8: 8, U10: 10, U12: 12 }
+  const mode = uni.getStorageSync('mode') || 'shangmen'
+  const key = `local_students_${mode}`
+  const rows = uni.getStorageSync(key)
+  if (!Array.isArray(rows)) return
+  let changed = false
+  const next = rows.map(s => {
+    if (!s || !s.class_group) return s
+    changed = true
+    const { class_group, ...rest } = s
+    return map[class_group] ? { ...rest, age: map[class_group] } : rest
+  })
+  if (changed) uni.setStorageSync(key, next)
+})()
+
 function nextId() {
   const n = (uni.getStorageSync(K.seq) || 0) + 1
   uni.setStorageSync(K.seq, n)
@@ -103,14 +121,13 @@ function withStudentNames(rows) {
 // ---------------- students ----------------
 
 export const studentStore = {
-  list({ keyword = '', status = '', class_group = '', page_size = 50, page = 1 } = {}) {
+  list({ keyword = '', status = '', page_size = 50, page = 1 } = {}) {
     let rows = publicList('students')
     if (keyword) {
       const k = keyword.toLowerCase()
       rows = rows.filter(s => [s.name, s.phone, s.parent_phone].some(v => (v || '').toLowerCase().includes(k)))
     }
     if (status) rows = rows.filter(s => s.status === status)
-    if (class_group) rows = rows.filter(s => s.class_group === class_group)
     return { total: rows.length, page, list: rows.slice(0, page_size) }
   },
   detail(id) {

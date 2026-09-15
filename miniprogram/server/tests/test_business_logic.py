@@ -330,15 +330,17 @@ def test_lesson_with_checkin_cannot_be_deleted(client, auth_headers):
 # 7. 其他已验证行为
 # =========================================================================
 def test_student_crud_roundtrip(client, auth_headers):
+    """CRUD 回读（09-15：class_group 已删、改用与双端同源的数字 age）。"""
     sid = _mk_student(client, auth_headers, name='原名', grade='初一')
     r = client.put(f'/api/v1/students/{sid}',
-                   json={'name': '改名后', 'grade': '初二', 'class_group': 'A班'},
+                   json={'name': '改名后', 'grade': '初二', 'age': 11},
                    headers=auth_headers)
     assert r.status_code == 200
     got = client.get(f'/api/v1/students/{sid}', headers=auth_headers).json()
     assert got['name'] == '改名后'
     assert got['grade'] == '初二'
-    assert got['class_group'] == 'A班'
+    assert got['age'] == 11
+    assert 'class_group' not in got, 'class_group 已删除（字段错位修正）'
 
 
 def test_student_empty_name_rejected(client, auth_headers):
