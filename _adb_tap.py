@@ -17,8 +17,9 @@
 - 脚本内**不存任何屏幕坐标**：坐标每次从 dump 现算，因此与「当前设备 + 当前 UI」强绑定。
   换设备（尤其分辨率/dpi 不同）、或 App 改了布局 → 必须重新 dump 定位，
   **勿沿用旧坐标、也勿沿用旧截图得出的间距结论**。
-- 不指定 `-s` 序列号，依赖「当前唯一在线设备」；多设备同连时 adb 会歧义（more than one device）。
-  本脚本刻意不持有任何设备标识（型号/序列号都不写死）。
+- 默认不指定 `-s`，依赖「当前唯一在线设备」；**双设备同连时用环境变量 `ADB_SERIAL=<序列号>` 指定目标**。
+  脚本本身不持有任何设备标识（型号/序列号都不写死，也不给默认值——默认值一旦写死，
+  换机后就会静默指向一台不存在的设备）。
 - ADB 走 %LOCALAPPDATA% 的 SDK 路径；输出目录见 OUT_DIR（本机工作区约定）。
 """
 import os
@@ -28,6 +29,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 ADB = os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe")
+# 双设备同连时用 ADB_SERIAL=<序列号> 指定目标设备；不设则行为不变（走默认/唯一在线设备）。
+# 刻意不给默认值：写死的序列号会在换机后静默指向不存在的设备，报错信息还很难懂。
+ADB_SERIAL = os.environ.get("ADB_SERIAL", "").strip()
 # ponytail: 输出目录写死本机工作区路径（截图只在本机看，跨机无意义）；
 #   换工作区改这一行即可，不值得为此加一层配置层。
 OUT_DIR = r"G:\shangmentiyu\_ui_coach"
@@ -35,7 +39,8 @@ UI_XML = os.path.join(OUT_DIR, "ui.xml")
 
 
 def adb(*args):
-    return subprocess.run([ADB, *args], capture_output=True, text=True, errors="replace")
+    base = [ADB, "-s", ADB_SERIAL] if ADB_SERIAL else [ADB]
+    return subprocess.run([*base, *args], capture_output=True, text=True, errors="replace")
 
 
 def dump():
