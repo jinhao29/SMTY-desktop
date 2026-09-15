@@ -39,6 +39,23 @@
       </view>
     </view>
 
+    <!-- 续费提醒（纯查询；阈值与 Android RenewalThresholds 同源：剩余≤3 / 30 天内到期） -->
+    <view class="card renew" v-if="renewal.count">
+      <view class="head-row">
+        <view class="section-title" style="color:#F59E0B">⏰ 续费提醒（{{ renewal.count }}）</view>
+        <view class="link" @tap="go('/pages/package/list')">全部课时包 ›</view>
+      </view>
+      <view v-for="a in renewal.list.slice(0, 5)" :key="a.package_id"
+            class="renew-row" @tap="goStudent(a.student_id)">
+        <text class="r-name">{{ a.student_name }}</text>
+        <text class="r-reason">{{ a.reason }}</text>
+        <text class="r-sub">剩 {{ a.remaining_lessons }} 节{{ renewWhen(a) }}</text>
+      </view>
+      <view v-if="renewal.count > 5" class="more" @tap="go('/pages/package/list')">
+        还有 {{ renewal.count - 5 }} 条 ›
+      </view>
+    </view>
+
     <!-- 今日课程 -->
     <view class="card">
       <view class="section-title">今日课程</view>
@@ -51,7 +68,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
-import { lessonApi } from '../../api'
+import { lessonApi, packageApi } from '../../api'
 import { useUserStore } from '../../stores/user'
 import LessonCard from '../../components/lesson-card.vue'
 
@@ -63,10 +80,20 @@ statusBarH.value = uni.getWindowInfo().statusBarHeight || 0
 // #endif
 
 const data = reactive({ lesson_count: 0, signed_count: 0, pending_count: 0, student_count: 0, lessons: [] })
+const renewal = ref({ count: 0, list: [] })
 
 async function load() {
   const res = await lessonApi.today()
   Object.assign(data, res)
+  try {
+    renewal.value = await packageApi.renewalAlerts()
+  } catch (e) { renewal.value = { count: 0, list: [] } }
+}
+
+function renewWhen(a) {
+  if (a.reason === '即将过期') return ` · ${a.days_to_expire} 天后到期`
+  if (a.reason === '已过期') return ' · 已过期'
+  return a.expire_date ? ` · ${a.expire_date.slice(5)} 到期` : ''
 }
 
 onMounted(load)
@@ -77,6 +104,7 @@ onPullDownRefresh(async () => {
 })
 
 function go(url) { uni.navigateTo({ url }) }
+function goStudent(id) { uni.navigateTo({ url: `/pages/student/detail?id=${id}` }) }
 // 快捷入口跳管理页并定位分段（tab 页不支持带参跳转，用 storage 传递）
 function goManage(seg) {
   uni.setStorageSync('manage_tab', seg)
@@ -108,6 +136,17 @@ function goDetail(l) { uni.navigateTo({ url: `/pages/checkin/index?lessonId=${l.
     .q-icon { width: 44px; height: 44px; margin: 0 auto; display: block; }
     .q-label { font-size: 12px; color: #5A6478; margin-top: 6px; }
   }
+}
+.renew { border-left: 3px solid #F59E0B;
+  .head-row { display: flex; justify-content: space-between; align-items: center;
+    .link { font-size: 12px; color: #5B6BF7; } }
+  .renew-row { display: flex; align-items: center; gap: 8px; padding: 7px 0;
+    border-top: 1px solid #F0F2F7;
+    &:first-of-type { border-top: none; }
+    .r-name { font-size: 14px; font-weight: 600; }
+    .r-reason { font-size: 11px; color: #F59E0B; font-weight: 600; }
+    .r-sub { font-size: 11px; color: #8A94A6; margin-left: auto; } }
+  .more { font-size: 12px; color: #5B6BF7; padding-top: 6px; border-top: 1px solid #F0F2F7; }
 }
 .section-title { margin-bottom: 8px; }
 </style>

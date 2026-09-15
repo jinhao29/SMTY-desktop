@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""课时包接口：CRUD + 统计。"""
+"""课时包接口：CRUD + 统计 + 续费提醒。"""
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -7,6 +9,11 @@ from typing import Optional
 from database import (execute, query, query_one, now_str, today_str,
                       recalc_student_remaining, package_fee_stats)
 from deps import get_current_user
+
+# 续费提醒阈值：与 Android RenewalThresholds 同源（勿自创），原因优先级与
+# OperationRepository.getRenewalAlerts 一致：已用完 > 已过期 > 剩余不足 > 即将过期
+RENEWAL_LOW_BALANCE = 3        # 剩余 1..3 = 余额不足
+RENEWAL_NEAR_EXPIRY_DAYS = 30  # 0..30 天内到期 = 即将过期
 
 router = APIRouter(prefix='/api/v1/packages', tags=['packages'],
                    dependencies=[Depends(get_current_user)])
@@ -61,6 +68,64 @@ def stats():
     s['student_count'] = query_one(
         "SELECT COUNT(DISTINCT student_id) AS c FROM lesson_packages WHERE deleted=0")['c']
     return s
+
+
+def _renewal_reason(remaining: int, expire_date: str, today: str):
+    """与 Android OperationRepository.getRenewalAlerts 同源的原因判定。
+
+    返回 None = 不需要提醒。优先级：已用完 > 已过期 > 剩余不足 > 即将过期。
+    不看 status 字段（refresh 时机两套，以事实数据为准）。
+    """
+    if remaining == 0:
+        return '已用完', -1
+    if expire_date and expire_date < today:
+        return '已过期', -1
+    if 1 <= remaining <= RENEWAL_LOW_BALANCE:
+        return '剩余不足', -1
+    if expire_date:
+        try:
+            dte = (date.fromisoformat(expire_date) - date.fromisoformat(today)).days
+            if 0 <= dte <= RENEWAL_NEAR_EXPIRY_DAYS:
+                return '即将过期', dte
+        except ValueError:
+            pass
+    return None, -1
+
+
+@router.get('/renewal-alerts')
+def renewal_alerts():
+    """续费 / 到期提醒名单（纯查询，不改任何数据、不动备份格式）。"""
+    _refresh_status()
+    rows = query(
+        "SELECT p.id, p.student_id, p.name AS package_name, p.total_lessons, "
+        "p.remaining_lessons, p.expire_date, s.name AS student_name "
+        "FROM lesson_packages p LEFT JOIN students s ON s.id=p.student_id AND s.deleted=0 "
+        "WHERE p.deleted=0")
+    today = today_str()
+    out = []
+    for r in rows:
+        reason, dte = _renewal_reason(r['remaining_lessons'], r['expire_date'], today)
+        if not reason:
+            continue
+        out.append({
+            'student_id': r['student_id'],
+            'student_name': r['student_name'] or f"#{r['student_id']}",
+            'package_id': r['id'], 'package_name': r['package_name'],
+            'remaining_lessons': r['remaining_lessons'],
+            'expire_date': r['expire_date'] or '',
+            'days_to_expire': dte if reason == '即将过期' else (-1 if reason == '已过期' else -1),
+            'reason': reason,
+        })
+    # 已过期最先；即将过期按天数升序；无期限的（已用完/剩余不足）殿后，再按剩余课时升序
+    def _sort_key(x):
+        if x['reason'] == '已过期':
+            return (0, 0, x['remaining_lessons'])
+        if x['days_to_expire'] >= 0:
+            return (1, x['days_to_expire'], x['remaining_lessons'])
+        return (2, 0, x['remaining_lessons'])
+
+    out.sort(key=_sort_key)
+    return {'count': len(out), 'list': out}
 
 
 @router.get('/{pkg_id}')

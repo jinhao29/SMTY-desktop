@@ -394,6 +394,40 @@ export const packageStore = {
   stats() {
     return feeStats()
   },
+  /** 续费提醒名单：与后端 /packages/renewal-alerts 同口径
+   *  （阈值与 Android RenewalThresholds 同源：剩余 1..3 / 30 天内到期；
+   *  优先级：已用完 > 已过期 > 剩余不足 > 即将过期；不看 status，以事实数据为准） */
+  renewalAlerts() {
+    refreshExpired()
+    const t = today()
+    const toDays = (d) => {
+      if (!d) return null
+      const diff = Math.round((new Date(d + 'T00:00:00') - new Date(t + 'T00:00:00')) / 86400000)
+      return isNaN(diff) ? null : diff
+    }
+    const LOW = 3, NEAR = 30
+    const out = []
+    withStudentNames(publicList('packages')).forEach(r => {
+      const remaining = r.remaining_lessons || 0
+      const days = toDays(r.expire_date)
+      let reason = null, dte = -1
+      if (remaining === 0) reason = '已用完'
+      else if (r.expire_date && days !== null && days < 0) reason = '已过期'
+      else if (remaining >= 1 && remaining <= LOW) reason = '剩余不足'
+      else if (days !== null && days >= 0 && days <= NEAR) { reason = '即将过期'; dte = days }
+      if (!reason) return
+      out.push({ student_id: r.student_id, student_name: r.student_name,
+        package_id: r.id, package_name: r.name,
+        remaining_lessons: remaining, expire_date: r.expire_date || '',
+        days_to_expire: dte, reason })
+    })
+    out.sort((a, b) => {
+      const ka = a.reason === '已过期' ? 0 : (a.days_to_expire >= 0 ? 1 : 2)
+      const kb = b.reason === '已过期' ? 0 : (b.days_to_expire >= 0 ? 1 : 2)
+      return ka - kb || (a.days_to_expire - b.days_to_expire) || (a.remaining_lessons - b.remaining_lessons)
+    })
+    return { count: out.length, list: out }
+  },
   detail(id) {
     return publicList('packages').find(p => p.id === id) || null
   },

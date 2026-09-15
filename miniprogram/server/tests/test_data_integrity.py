@@ -362,7 +362,52 @@ def test_coach_payout_dividend_legacy_never_computes(client, auth_headers):
     cid = _mk_coach(client, auth_headers, '分红教练', salary_mode='dividend',
                     lesson_rate=999)
     d = client.get(f'/api/v1/coaches/{cid}/payout', headers=auth_headers).json()
-    assert d['payout'] is None, 'dividend 残留数据不得算出 999×0 之外的任何金额'
+    assert d['payout'] is None, 'dividend 残留数据也不得算出金额（旧实现兜底按课时费）'
+
+
+# =========================================================================
+# 8. 续费提醒名单：阈值与 Android RenewalThresholds 同源
+# =========================================================================
+def _set_pkg_fields(pid, **kw):
+    """测试样本构造：绕过 API 直接改包字段（隔离库，conftest 已保证）。"""
+    import database
+    sets = ','.join(f'{k}=?' for k in kw)
+    database.execute(f"UPDATE lesson_packages SET {sets} WHERE id=?", (*kw.values(), pid))
+
+
+def test_renewal_alerts_thresholds_match_android(client, auth_headers):
+    """剩余 1..3 不足 / 30 天内到期 / 已用完 / 已过期；原因优先级与 Android 一致。"""
+    from datetime import date, timedelta
+    d = lambda n: (date.today() + timedelta(days=n)).isoformat()
+
+    cases = {
+        '低余额': dict(remaining=2, expire_date=''),          # 剩余不足
+        '已用完': dict(remaining=0, expire_date=''),          # 已用完
+        '将过期': dict(remaining=10, expire_date=d(10)),      # 即将过期（10 天）
+        '已过期': dict(remaining=10, expire_date=d(-5)),      # 已过期
+        '双触发': dict(remaining=3, expire_date=d(5)),        # 剩余不足（优先级高于即将过期）
+        '健康40天': dict(remaining=10, expire_date=d(40)),    # 不出现（超 30 天窗口）
+        '健康足额': dict(remaining=15, expire_date=''),       # 不出现（课时充足无期限）
+    }
+    ids = {}
+    for name, kw in cases.items():
+        sid = _mk_student(client, auth_headers, name)
+        pid = _mk_package(client, auth_headers, sid, total=max(kw['remaining'], 10))
+        _set_pkg_fields(pid, remaining_lessons=kw['remaining'], expire_date=kw['expire_date'])
+        ids[name] = sid
+
+    res = client.get('/api/v1/packages/renewal-alerts', headers=auth_headers).json()
+    by_student = {a['student_id']: a for a in res['list']}
+
+    assert by_student[ids['低余额']]['reason'] == '剩余不足'
+    assert by_student[ids['低余额']]['days_to_expire'] == -1
+    assert by_student[ids['已用完']]['reason'] == '已用完'
+    assert by_student[ids['将过期']]['reason'] == '即将过期'
+    assert by_student[ids['将过期']]['days_to_expire'] == 10
+    assert by_student[ids['已过期']]['reason'] == '已过期'
+    assert by_student[ids['双触发']]['reason'] == '剩余不足', '优先级：剩余不足 > 即将过期'
+    assert res['count'] == 5, f'健康的两个不应出现在名单，实际 {res["count"]}'
+    assert res['list'][0]['reason'] == '已过期', '已过期排最前'
 
 
 def test_mixed_checkin_flags_only_shortfall(client, auth_headers):
