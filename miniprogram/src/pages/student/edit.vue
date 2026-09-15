@@ -36,12 +36,6 @@
         </view>
       </view>
       <view class="form-item">
-        <text class="form-label">课时到期日</text>
-        <picker mode="date" :value="form.expire_date" @change="(e) => form.expire_date = e.detail.value">
-          <view class="form-input picker">{{ form.expire_date || '选填' }}</view>
-        </picker>
-      </view>
-      <view class="form-item">
         <text class="form-label">备注</text>
         <textarea class="form-textarea" v-model="form.note" placeholder="选填" />
       </view>
@@ -64,9 +58,11 @@ const isClub = computed(() => modeStore.mode === 'club')
 const id = ref(0)
 const saving = ref(false)
 
+// 学员级「课时到期日」已作废：到期日在课时包上（双端互通时该字段被丢弃），
+// 学员表单不再提供，form 不含 expire_date（回填对象里的同名键提交后会被服务端忽略）
 const form = reactive({
   name: '', phone: '', grade: '', parent_phone: '',
-  address: '', class_group: '', status: 'active', expire_date: '', note: '',
+  address: '', class_group: '', status: 'active', note: '',
 })
 
 async function save() {

@@ -21,7 +21,8 @@ class StudentBody(BaseModel):
     address: str = ''
     class_group: str = ''
     status: str = 'active'
-    expire_date: str = ''
+    # 学员级 expire_date 已作废（到期日在课时包上，双端互通时该字段被丢弃）：
+    # 不再出现在请求模型与写入语句里，DB 旧列与旧值保留但从此不再被更新
     note: str = ''
 
 
@@ -67,20 +68,21 @@ def create_student(body: StudentBody):
         raise HTTPException(status_code=400, detail='姓名不能为空')
     sid = execute(
         "INSERT INTO students(name,phone,grade,parent_phone,address,class_group,status,"
-        "remaining_lessons,expire_date,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "remaining_lessons,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (body.name.strip(), body.phone, body.grade, body.parent_phone, body.address,
-         body.class_group, body.status, 0, body.expire_date, body.note, now_str(), now_str()))
+         body.class_group, body.status, 0, body.note, now_str(), now_str()))
     return {'id': sid}
 
 
 @router.put('/{student_id}')
 def update_student(student_id: int, body: StudentBody):
     _fetch(student_id)
+    # expire_date 不在 SET 里：学员级到期日已作废，旧值原样保留、不再被更新
     execute(
         "UPDATE students SET name=?,phone=?,grade=?,parent_phone=?,address=?,class_group=?,"
-        "status=?,expire_date=?,note=?,updated_at=? WHERE id=?",
+        "status=?,note=?,updated_at=? WHERE id=?",
         (body.name.strip(), body.phone, body.grade, body.parent_phone, body.address,
-         body.class_group, body.status, body.expire_date, body.note, now_str(), student_id))
+         body.class_group, body.status, body.note, now_str(), student_id))
     return {'ok': True}
 
 

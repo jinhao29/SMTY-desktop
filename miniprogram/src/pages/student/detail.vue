@@ -20,7 +20,6 @@
       <view class="cell"><view class="cell-label">手机号</view><view class="cell-value">{{ s.phone || '—' }}</view></view>
       <view class="cell"><view class="cell-label">家长联系方式</view><view class="cell-value">{{ s.parent_phone || '—' }}</view></view>
       <view class="cell"><view class="cell-label">{{ modeStore.mode === 'club' ? '上课场馆' : '小区地址' }}</view><view class="cell-value">{{ s.address || '—' }}</view></view>
-      <view class="cell"><view class="cell-label">课时到期日</view><view class="cell-value">{{ s.expire_date || '—' }}</view></view>
       <view class="cell" v-if="s.note"><view class="cell-label">备注</view><view class="cell-value">{{ s.note }}</view></view>
     </view>
 

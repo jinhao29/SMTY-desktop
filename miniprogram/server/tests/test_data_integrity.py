@@ -183,6 +183,16 @@ def test_student_note_defaults_empty(client, auth_headers):
     assert _student(client, auth_headers, sid)['note'] == ''
 
 
+def test_student_level_expire_date_retired(client, auth_headers):
+    """学员级到期日已作废：PUT 带它也不再写入（到期日唯一归属是课时包）。"""
+    sid = _mk_student(client, auth_headers, '小明')
+    client.put(f'/api/v1/students/{sid}',
+               json={'name': '小明改名', 'expire_date': '2026-12-31'}, headers=auth_headers)
+    s = _student(client, auth_headers, sid)
+    assert s['name'] == '小明改名', '其余字段照常更新'
+    assert s['expire_date'] == '', '学员级到期日不得再被写入'
+
+
 def test_legacy_db_migration_adds_note(tmp_path):
     """老库（students 无 note 列）升级：补列、旧数据保留、重复执行不报错。"""
     import sqlite3
