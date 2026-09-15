@@ -211,3 +211,49 @@ def test_legacy_db_migration_adds_note(tmp_path):
 
     database._migrate(conn)  # 幂等：第二次不得抛 duplicate column
     conn.close()
+
+
+# =========================================================================
+# 4. 备份导入：列名必须过白名单（P1-①）
+# =========================================================================
+def _import(client, headers, **tables):
+    body = {'mode': 'shangmen', 'merge': True, **tables}
+    return client.post('/api/v1/backup/import', json=body, headers=headers)
+
+
+def test_import_accepts_known_columns(client, auth_headers):
+    """合法备份正常导入（含 note 这类业务列）。"""
+    r = _import(client, auth_headers, students=[
+        {'id': 1, 'name': '导入学员', 'note': '来自备份', 'deleted': 0,
+         'created_at': '2026-01-01 00:00:00', 'updated_at': '2026-01-01 00:00:00'}])
+    assert r.status_code == 200, r.text
+    assert r.json()['imported']['students'] == 1
+    assert _student(client, auth_headers, 1)['note'] == '来自备份'
+
+
+def test_import_ignores_display_field(client, auth_headers):
+    """导出/接口附带的 student_name 不是表列，应忽略而不是拒绝。"""
+    _mk_student(client, auth_headers, '甲')
+    r = _import(client, auth_headers, lesson_packages=[
+        {'id': 1, 'student_id': 1, 'name': '包', 'total_lessons': 10,
+         'remaining_lessons': 10, 'price': 0, 'paid_amount': -1, 'status': 'active',
+         'student_name': '甲'}])
+    assert r.status_code == 200, r.text
+
+
+def test_import_rejects_unknown_column(client, auth_headers):
+    """未知列名（含注入尝试）一律 400。"""
+    r = _import(client, auth_headers, students=[
+        {'id': 1, 'name': '甲', "name) VALUES('x'); --": 'y'}])
+    assert r.status_code == 400, r.text
+    assert '未知列' in r.json()['detail']
+
+
+def test_import_rejection_leaves_no_partial_write(client, auth_headers):
+    """拒绝时一条都不落库——合法行排在前也不得先写进去。"""
+    r = _import(client, auth_headers, students=[
+        {'id': 1, 'name': '甲', 'deleted': 0},
+        {'id': 2, 'name': '乙', 'evil': 1}])
+    assert r.status_code == 400
+    assert client.get('/api/v1/students', headers=auth_headers).json()['total'] == 0, \
+        '被拒的导入不得留下前半份数据'
