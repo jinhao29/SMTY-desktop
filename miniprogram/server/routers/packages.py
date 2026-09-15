@@ -90,12 +90,22 @@ def create_package(body: PackageBody):
 @router.put('/{pkg_id}')
 def update_package(pkg_id: int, body: PackageBody):
     pkg = _fetch(pkg_id)
+    # 剩余课时与总课时解耦：编辑（改名/改价/改有效期）不得重置已消耗课时，
+    # 否则「改个包名 → 已消课时全部复活」是静默的数据损坏。
+    # 仅当总课时增加时同步补足剩余（加课场景）；总课时减少时上限收敛到新总数，
+    # 避免 remaining > total 这种自相矛盾的状态。
+    remaining = min(pkg['remaining_lessons'] + max(0, body.total_lessons - pkg['total_lessons']),
+                    body.total_lessons)
+    old_student_id = pkg['student_id']
     execute(
         "UPDATE lesson_packages SET student_id=?,name=?,total_lessons=?,remaining_lessons=?,"
         "expire_date=?,purchase_date=?,price=?,paid_amount=?,updated_at=? WHERE id=?",
         (body.student_id, body.name.strip(), body.total_lessons,
-         body.total_lessons, body.expire_date, body.purchase_date or pkg['purchase_date'],
+         remaining, body.expire_date, body.purchase_date or pkg['purchase_date'],
          body.price, body.paid_amount, now_str(), pkg_id))
+    # 换学员时旧学员的汇总同样要重算，否则那份课时会同时挂在两个人头上
+    if old_student_id != body.student_id:
+        recalc_student_remaining(old_student_id)
     recalc_student_remaining(body.student_id)
     return {'ok': True}
 

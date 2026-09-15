@@ -396,10 +396,18 @@ export const packageStore = {
   update(id, data) {
     const rows = read(K.packages)
     const pkg = rows.find(p => p.id === id)
+    if (!pkg) return { ok: true }
+    // 与后端 update_package 同口径：编辑不改已消耗课时，总课时增加才补足剩余；
+    // 上限收敛到新总数，避免 remaining > total。（data 可能带 remaining_lessons，
+    // 必须显式写在展开之后才能压住它）
+    const total = Number(data.total_lessons) || 0
+    const remaining = Math.min(pkg.remaining_lessons + Math.max(0, total - pkg.total_lessons), total)
     write(K.packages, rows.map(p => (p.id === id
-      ? { ...p, ...data, remaining_lessons: data.total_lessons, updated_at: stamp() }
+      ? { ...p, ...data, remaining_lessons: remaining, updated_at: stamp() }
       : p)))
-    if (pkg) recalcRemaining(data.student_id || pkg.student_id)
+    const newStudentId = data.student_id || pkg.student_id
+    if (newStudentId !== pkg.student_id) recalcRemaining(pkg.student_id)
+    recalcRemaining(newStudentId)
     return { ok: true }
   },
   remove(id) {
