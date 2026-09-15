@@ -278,6 +278,14 @@ def test_student_age_absent_means_null(client, auth_headers):
     assert _student(client, auth_headers, sid)['age'] is None
 
 
+def test_export_backup_carries_age(client, auth_headers):
+    """备份 JSON 的学生行带 age 键：未填为 null（与 Android 0=未填互转，PC 同规则）。"""
+    sid = _mk_student(client, auth_headers, '甲')
+    payload = client.get('/api/v1/backup/export', headers=auth_headers).json()
+    row = next(r for r in payload['students'] if r['id'] == sid)
+    assert 'age' in row and row['age'] is None
+
+
 # =========================================================================
 # 4. 备份导入：列名必须过白名单（P1-①）
 # =========================================================================
