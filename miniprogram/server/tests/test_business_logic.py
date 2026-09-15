@@ -433,7 +433,11 @@ def test_package_list_includes_student_name(client, auth_headers):
 
 
 def test_coach_payout_calculation(client, auth_headers):
-    """per_lesson 模式：已上课时 × 课时费。"""
+    """薪资口径降级（09-15）：payout 只给课时数，金额一律 None。
+
+    旧口径「已上课时 × 课时费」已废除——薪资算法唯一口径在 Android
+    PayoutCalculator（角色决定），小程序自算会与手机端结算不一致。
+    """
     cid = _mk_coach(client, auth_headers, role='parttime',
                     salary_mode='per_lesson', lesson_rate=200)
     sid = _mk_student(client, auth_headers)
@@ -445,4 +449,5 @@ def test_coach_payout_calculation(client, auth_headers):
     p = client.get(f'/api/v1/coaches/{cid}/payout', headers=auth_headers).json()
     assert p['total_lessons'] == 1
     assert p['signed_lessons'] == 1
-    assert p['payout'] == 200.0, f'课时费应 200，实际 {p["payout"]}'
+    assert p['payout'] is None, '小程序不得再返回计算金额'
+    assert '手机端' in p['payout_note']
